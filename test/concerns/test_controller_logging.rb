@@ -329,4 +329,114 @@ describe InboundHttpLogger::Concerns::ControllerLogging do
       _(metadata[:controller]).must_equal 'test'
     end
   end
+
+  describe "inheritance chain callback lookup" do
+    before do
+      # Clear any existing callbacks before each test
+      InboundHttpLogger::Concerns::ControllerLogging.send(:class_variable_set, :@@context_callbacks, {})
+    end
+
+    let(:base_controller_class) do
+      Class.new(controller_base_class) do
+        include InboundHttpLogger::Concerns::ControllerLogging
+      end
+    end
+
+    it "finds callback in current class when set" do
+      # Set callback on the class itself
+      base_controller_class.inbound_logging_context(:test_callback)
+
+      callback = base_controller_class.inbound_logging_context_callback
+      _(callback).must_equal :test_callback
+    end
+
+    it "returns nil when no callback is set anywhere in chain" do
+      # No callback set anywhere
+      callback = base_controller_class.inbound_logging_context_callback
+      _(callback).must_be_nil
+    end
+
+    it "finds callback in parent class when not set in current class" do
+      # Set callback on base class
+      base_controller_class.inbound_logging_context(:parent_callback)
+
+      # Create subclass without its own callback
+      subclass = Class.new(base_controller_class)
+
+      # Should find the parent's callback
+      callback = subclass.inbound_logging_context_callback
+      _(callback).must_equal :parent_callback
+    end
+
+    it "prefers current class callback over parent class callback" do
+      # Set callback on base class
+      base_controller_class.inbound_logging_context(:parent_callback)
+
+      # Create subclass with its own callback
+      subclass = Class.new(base_controller_class) do
+        inbound_logging_context(:child_callback)
+      end
+
+      # Should find the child's callback, not the parent's
+      callback = subclass.inbound_logging_context_callback
+      _(callback).must_equal :child_callback
+    end
+
+    it "walks up multiple inheritance levels" do
+      # Set callback on base class
+      base_controller_class.inbound_logging_context(:grandparent_callback)
+
+      # Create middle class without callback
+      middle_class = Class.new(base_controller_class)
+
+      # Create final subclass without callback
+      subclass = Class.new(middle_class)
+
+      # Should find the grandparent's callback
+      callback = subclass.inbound_logging_context_callback
+      _(callback).must_equal :grandparent_callback
+    end
+
+    it "stops at Object class and returns nil if no callback found" do
+      # Create a deep inheritance chain with no callbacks
+      level1 = Class.new(base_controller_class)
+      level2 = Class.new(level1)
+      level3 = Class.new(level2)
+
+      # Should return nil since no callback is set anywhere
+      callback = level3.inbound_logging_context_callback
+      _(callback).must_be_nil
+    end
+
+    it "works with lambda callbacks in inheritance chain" do
+      test_lambda = ->(log) { log.metadata[:inherited] = true }
+
+      # Set lambda callback on base class
+      base_controller_class.inbound_logging_context(test_lambda)
+
+      # Create subclass
+      subclass = Class.new(base_controller_class)
+
+      # Should find the parent's lambda callback
+      callback = subclass.inbound_logging_context_callback
+      _(callback).must_equal test_lambda
+    end
+
+    it "finds first callback when multiple levels have callbacks" do
+      # Set callback on base class
+      base_controller_class.inbound_logging_context(:grandparent_callback)
+
+      # Create middle class with callback
+      middle_class = Class.new(base_controller_class) do
+        inbound_logging_context(:parent_callback)
+      end
+
+      # Create final subclass without callback
+      subclass = Class.new(middle_class)
+
+      # Should find the immediate parent's callback, not the grandparent's
+      callback = subclass.inbound_logging_context_callback
+      _(callback).must_equal :parent_callback
+    end
+  end
 end

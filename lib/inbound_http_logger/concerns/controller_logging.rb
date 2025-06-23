@@ -57,8 +57,20 @@ module InboundHttpLogger
         end
 
         # Get the context callback for this controller class
+        # Walks up the inheritance chain to find the first registered callback
         def inbound_logging_context_callback
-          context_callbacks[name]
+          # Check current class first
+          return context_callbacks[name] if context_callbacks[name]
+
+          # Walk up the inheritance chain
+          current_class = self
+          while current_class.superclass && current_class.superclass != Object
+            current_class = current_class.superclass
+            callback = context_callbacks[current_class.name]
+            return callback if callback
+          end
+
+          nil
         end
 
         private
