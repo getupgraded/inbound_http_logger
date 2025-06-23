@@ -11,14 +11,23 @@ class <%= migration_class_name %> < ActiveRecord::Migration[<%= ActiveRecord::Mi
       t.string :user_agent
       t.string :referrer
 
-      # Request details
-      t.json :request_headers, default: {}
-      t.json :request_body
+      # Request details - Use JSONB for PostgreSQL, JSON for other databases
+      if connection.adapter_name == 'PostgreSQL'
+        t.jsonb :request_headers, default: {}
+        t.jsonb :request_body
+        t.jsonb :response_headers, default: {}
+        t.jsonb :response_body
+        t.jsonb :metadata, default: {}
+      else
+        t.json :request_headers, default: {}
+        t.json :request_body
+        t.json :response_headers, default: {}
+        t.json :response_body
+        t.json :metadata, default: {}
+      end
 
       # Response details
       t.integer :status_code, null: false
-      t.json :response_headers, default: {}
-      t.json :response_body
 
       # Performance metrics
       t.decimal :duration_seconds, precision: 10, scale: 6
@@ -27,8 +36,7 @@ class <%= migration_class_name %> < ActiveRecord::Migration[<%= ActiveRecord::Mi
       # Polymorphic association
       t.references :loggable, polymorphic: true, type: :bigint
 
-      # Metadata and timestamps
-      t.json :metadata, default: {}
+      # Timestamps
       t.timestamps
 
       # Indexes for common queries
@@ -41,5 +49,16 @@ class <%= migration_class_name %> < ActiveRecord::Migration[<%= ActiveRecord::Mi
       # Add a partial index for failed requests
       t.index :status_code, where: 'status_code >= 400', name: 'index_<%= table_name %>_on_failed_requests'
     end
+
+    # Add JSONB indexes for PostgreSQL to improve JSON query performance
+    if connection.adapter_name == 'PostgreSQL'
+      add_index :<%= table_name %>, :response_body, using: :gin, name: 'index_<%= table_name %>_on_response_body_gin'
+      add_index :<%= table_name %>, :request_body, using: :gin, name: 'index_<%= table_name %>_on_request_body_gin'
+      add_index :<%= table_name %>, :metadata, using: :gin, name: 'index_<%= table_name %>_on_metadata_gin'
+    end
+  end
+
+  def down
+    drop_table :<%= table_name %>
   end
 end

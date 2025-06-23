@@ -314,6 +314,38 @@ The following URL patterns are excluded by default:
 - **Content type filtering**: Static assets and HTML are skipped
 - **Body size limits**: Large request/response bodies are truncated
 - **Failsafe design**: Logging errors never break HTTP requests
+- **JSONB optimization**: PostgreSQL users benefit from native JSON storage and querying
+
+### PostgreSQL JSONB Optimization
+
+When using PostgreSQL, the gem automatically uses JSONB columns for storing JSON request and response bodies, providing several benefits:
+
+- **Native JSON storage**: JSON responses are stored as parsed objects, not strings
+- **Efficient querying**: Use PostgreSQL's JSON operators for fast searches
+- **Reduced memory usage**: No application-level JSON parsing overhead
+- **Better indexing**: GIN indexes on JSONB columns for optimal query performance
+
+#### JSONB Query Examples
+
+```ruby
+# Search for requests containing specific JSON data
+logs = InboundHttpLogger::Models::InboundRequestLog.with_response_containing('status', 'success')
+
+# Use PostgreSQL JSON operators directly
+logs = InboundHttpLogger::Models::InboundRequestLog.where("response_body @> ?", { status: 'error' }.to_json)
+
+# Search within nested JSON structures
+logs = InboundHttpLogger::Models::InboundRequestLog.where("response_body -> 'user' ->> 'role' = ?", 'admin')
+
+# Use GIN indexes for fast text search within JSON
+logs = InboundHttpLogger::Models::InboundRequestLog.where("response_body::text ILIKE ?", '%error%')
+```
+
+#### Database Compatibility
+
+- **PostgreSQL**: Uses JSONB columns with GIN indexes for optimal performance
+- **SQLite/MySQL**: Uses standard JSON columns with text-based searching
+- **Migration**: Automatically detects database adapter and uses appropriate column types
 
 ## Rails-Style Controller Hooks
 

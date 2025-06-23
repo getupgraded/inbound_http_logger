@@ -170,12 +170,17 @@ module InboundHttpLogger
       begin
         # Try to parse as JSON
         parsed = JSON.parse(body)
-        filtered = filter_sensitive_data(parsed)
+        filtered = filter_sensitive_data_internal(parsed)
         JSON.generate(filtered)
       rescue JSON::ParserError
         # If not JSON, return as-is
         body
       end
+    end
+
+    # Expose filter_sensitive_data for use by models
+    def filter_sensitive_data(data)
+      filter_sensitive_data_internal(data)
     end
 
     # Get the logger instance
@@ -193,7 +198,7 @@ module InboundHttpLogger
     private
 
       # Recursively filter sensitive data from hashes and arrays
-      def filter_sensitive_data(data)
+      def filter_sensitive_data_internal(data)
         case data
         when Hash
           filtered = {}
@@ -202,12 +207,12 @@ module InboundHttpLogger
             if @sensitive_body_keys.any? { |sensitive| key_str.include?(sensitive) }
               filtered[key] = '[FILTERED]'
             else
-              filtered[key] = filter_sensitive_data(value)
+              filtered[key] = filter_sensitive_data_internal(value)
             end
           end
           filtered
         when Array
-          data.map { |item| filter_sensitive_data(item) }
+          data.map { |item| filter_sensitive_data_internal(item) }
         else
           data
         end

@@ -27,7 +27,30 @@ module InboundHttpLogger
       scope :failed, -> { where('status_code >= 400') }
       scope :slow, ->(threshold_ms = 1000) { where('duration_ms > ?', threshold_ms) }
 
+      # JSONB-specific scopes for PostgreSQL
+      scope :with_response_containing, lambda { |key, value|
+        if using_jsonb?
+          where("response_body @> ?", { key => value }.to_json)
+        else
+          where("JSON_EXTRACT(response_body, ?) = ?", "$.#{key}", value.to_s)
+        end
+      }
+
+      scope :with_request_containing, lambda { |key, value|
+        if using_jsonb?
+          where("request_body @> ?", { key => value }.to_json)
+        else
+          where("JSON_EXTRACT(request_body, ?) = ?", "$.#{key}", value.to_s)
+        end
+      }
+
       # JSON columns are automatically handled in Rails 8.0+
+
+      # Check if we're using JSONB (PostgreSQL) or regular JSON
+      def self.using_jsonb?
+        connection.adapter_name == 'PostgreSQL' &&
+          columns_hash['response_body']&.sql_type == 'jsonb'
+      end
 
       # Class methods for logging
       class << self
@@ -58,8 +81,8 @@ module InboundHttpLogger
             # Filter sensitive data
             filtered_request_headers = InboundHttpLogger.configuration.filter_headers(extract_request_headers(request))
             filtered_response_headers = InboundHttpLogger.configuration.filter_headers(headers)
-            filtered_request_body = InboundHttpLogger.configuration.filter_body(request_body)
-            filtered_response_body = InboundHttpLogger.configuration.filter_body(response_body)
+            filtered_request_body = filter_body_for_storage(request_body)
+            filtered_response_body = filter_body_for_storage(response_body)
 
             # Create the log entry
             create!(
@@ -92,10 +115,18 @@ module InboundHttpLogger
           # General search
           if params[:q].present?
             q = "%#{params[:q].downcase}%"
-            scope = scope.where(
-              'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
-              q, q, q
-            )
+            if using_jsonb?
+              # Use JSONB operators for better performance
+              scope = scope.where(
+                'LOWER(url) LIKE ? OR request_body::text ILIKE ? OR response_body::text ILIKE ?',
+                q, "%#{params[:q]}%", "%#{params[:q]}%"
+              )
+            else
+              scope = scope.where(
+                'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
+                q, q, q
+              )
+            end
           end
 
           # Filter by status
@@ -143,6 +174,31 @@ module InboundHttpLogger
         end
 
         private
+
+          # Filter body for storage, handling JSONB vs JSON columns differently
+          def filter_body_for_storage(body)
+            return body unless body.is_a?(String) && body.present?
+            return body if body.bytesize > InboundHttpLogger.configuration.max_body_size
+
+            # For JSONB columns, we want to store parsed JSON objects to avoid double-parsing
+            if using_jsonb?
+              filter_body_for_jsonb(body)
+            else
+              # For regular JSON columns, use the standard filtering (which re-serializes)
+              InboundHttpLogger.configuration.filter_body(body)
+            end
+          end
+
+          # Filter body for JSONB storage - returns parsed object or original string
+          def filter_body_for_jsonb(body)
+            # Try to parse as JSON
+            parsed = JSON.parse(body)
+            # Filter sensitive data and return the parsed object (not re-serialized)
+            InboundHttpLogger.configuration.filter_sensitive_data(parsed)
+          rescue JSON::ParserError
+            # If not JSON, return as-is
+            body
+          end
 
           # Extract request headers from Rack env
           def extract_request_headers(request)

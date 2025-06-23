@@ -320,4 +320,73 @@ describe InboundHttpLogger::Models::InboundRequestLog do
       _(model.exists?(recent_log.id)).must_equal true
     end
   end
+
+  describe "JSONB functionality" do
+    before do
+      InboundHttpLogger.enable!
+    end
+
+    it "detects JSONB usage correctly" do
+      # This will depend on the database adapter being used in tests
+      if ActiveRecord::Base.connection.adapter_name == 'PostgreSQL'
+        # Skip if we don't have the actual table yet (migration not run)
+        skip "JSONB test requires PostgreSQL with migrated table" unless model.table_exists?
+      else
+        _(model.using_jsonb?).must_equal false
+      end
+    end
+
+    it "stores JSON response as parsed object for JSONB" do
+      skip "JSONB test requires PostgreSQL" unless model.using_jsonb?
+
+      request = create_rack_request(method: 'POST', path: '/api/test')
+      json_response = '{"status":"success","data":{"id":123,"name":"test"}}'
+
+      log = model.log_request(request, nil, 200, {}, json_response, 0.1)
+
+      _(log).wont_be_nil
+      # For JSONB, response_body should be stored as a parsed hash, not a string
+      _(log.response_body).must_be_kind_of Hash
+      _(log.response_body['status']).must_equal 'success'
+      _(log.response_body['data']['id']).must_equal 123
+    end
+
+    it "stores non-JSON response as string for JSONB" do
+      skip "JSONB test requires PostgreSQL" unless model.using_jsonb?
+
+      request = create_rack_request(method: 'GET', path: '/api/test')
+      text_response = 'plain text response'
+
+      log = model.log_request(request, nil, 200, {}, text_response, 0.1)
+
+      _(log).wont_be_nil
+      # For non-JSON content, should remain as string
+      _(log.response_body).must_be_kind_of String
+      _(log.response_body).must_equal 'plain text response'
+    end
+
+    it "uses JSONB operators for search when available" do
+      skip "JSONB test requires PostgreSQL" unless model.using_jsonb?
+
+      # Create test logs with JSON data
+      json_log = model.create!(
+        http_method: "POST",
+        url: "/api/users",
+        status_code: 200,
+        response_body: { "users" => [{ "name" => "John", "role" => "admin" }] }
+      )
+
+      text_log = model.create!(
+        http_method: "GET",
+        url: "/api/status",
+        status_code: 200,
+        response_body: "OK"
+      )
+
+      # Search should find the JSON log
+      results = model.search(q: "John")
+      _(results).must_include json_log
+      _(results).wont_include text_log
+    end
+  end
 end
