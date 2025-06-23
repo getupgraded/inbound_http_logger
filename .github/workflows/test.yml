@@ -22,23 +22,15 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby-version }}
-          bundler-cache: false
-
-      - name: Install dependencies
-        run: |
-          bundle install --jobs 4 --retry 3
+          bundler-cache: true
 
       - name: Run tests
         run: |
-          # Run tests individually to avoid interference issues
-          bundle exec ruby -Ilib:test test/middleware/test_logging_middleware.rb
-          bundle exec ruby -Ilib:test test/models/test_inbound_request_log.rb
-          bundle exec ruby -Ilib:test test/test_inbound_http_logger.rb
+          # Run tests using pattern-based discovery to match Rakefile
+          bundle exec rake test
 
       - name: Run RuboCop
         run: |
-          # Install RuboCop and required plugins from root Gemfile
-          bundle install --jobs 4 --retry 3
           bundle exec rubocop --config .rubocop.yml
         continue-on-error: true
 
@@ -53,11 +45,7 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
-          bundler-cache: false
-
-      - name: Install dependencies
-        run: |
-          bundle install --jobs 4 --retry 3
+          bundler-cache: true
 
       - name: Build gem
         run: |
@@ -67,7 +55,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: inbound-http-logger-gem
-          path: ./*.gem
+          path: pkg/*.gem
           retention-days: 7
 
   quality:
@@ -81,11 +69,7 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
-          bundler-cache: false
-
-      - name: Install dependencies
-        run: |
-          bundle install --jobs 4 --retry 3
+          bundler-cache: true
 
       - name: Validate gemspec
         run: |
@@ -113,11 +97,7 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
-          bundler-cache: false
-
-      - name: Install dependencies
-        run: |
-          bundle install --jobs 4 --retry 3
+          bundler-cache: true
 
       - name: Run bundle audit
         run: |

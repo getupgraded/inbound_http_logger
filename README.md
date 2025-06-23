@@ -1,6 +1,6 @@
 # InboundHttpLogger
 
-[![CI](https://github.com/getupgraded/inbound_http_logger/actions/workflows/test.yml/badge.svg)](https://github.com/getupgraded/inbound_http_logger/actions/workflows/inbound-http-logger-ci.yml)
+[![CI](https://github.com/getupgraded/inbound_http_logger/actions/workflows/test.yml/badge.svg)](https://github.com/getupgraded/inbound_http_logger/actions/workflows/test.yml)
 
 A production-safe gem for comprehensive inbound HTTP request logging in Rails applications. Uses Rack middleware for automatic request capture with configurable filtering and controller-level integration.
 

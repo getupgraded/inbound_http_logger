@@ -37,24 +37,7 @@ bundle install
 
 # Run tests
 print_header "Running Tests"
-test_files=(
-    "test/middleware/test_logging_middleware.rb"
-    "test/models/test_inbound_request_log.rb"
-    "test/test_inbound_http_logger.rb"
-)
-
-all_tests_passed=true
-for test_file in "${test_files[@]}"; do
-    if [[ -f "$test_file" ]]; then
-        print_status $BLUE "Running $test_file..."
-        if ! bundle exec ruby -Ilib:test "$test_file"; then
-            print_status $RED "❌ $test_file failed"
-            all_tests_passed=false
-        fi
-    fi
-done
-
-if $all_tests_passed; then
+if bundle exec rake test; then
     print_status $GREEN "✅ All tests passed"
 else
     print_status $RED "❌ Some tests failed"
