@@ -9,15 +9,13 @@ module InboundHttpLogger
 
       included do
         # Add callbacks for automatic logging
-        before_action :setup_inbound_logging, if: :should_log_inbound_request?
-        after_action :finalize_inbound_logging, if: :should_log_inbound_request?
+        after_action :setup_inbound_logging, if: :should_log_inbound_request?
       end
 
       class_methods do
         # Skip logging for specific actions
         def skip_inbound_logging(*actions)
-          skip_before_action :setup_inbound_logging, only: actions
-          skip_after_action :finalize_inbound_logging, only: actions
+          skip_after_action :setup_inbound_logging, only: actions
         end
 
         # Configure request logging with Rails-standard filter options
@@ -35,15 +33,12 @@ module InboundHttpLogger
 
           if only
             # Skip all actions, then enable only specified ones
-            skip_before_action :setup_inbound_logging
-            skip_after_action :finalize_inbound_logging
+            skip_after_action :setup_inbound_logging
 
-            before_action :setup_inbound_logging, only: only, if: :should_log_inbound_request?
-            after_action :finalize_inbound_logging, only: only, if: :should_log_inbound_request?
+            after_action :setup_inbound_logging, only: only, if: :should_log_inbound_request?
           elsif except
             # Enable all actions (default), then skip specified ones
-            skip_before_action :setup_inbound_logging, only: except
-            skip_after_action :finalize_inbound_logging, only: except
+            skip_after_action :setup_inbound_logging, only: except
           end
           # If neither only nor except is specified, use default behavior (log all actions)
         end
@@ -133,12 +128,6 @@ module InboundHttpLogger
 
           # Execute custom context callback if defined
           execute_context_callback
-        end
-
-        # Finalize logging after action (if needed for custom logic)
-        def finalize_inbound_logging
-          # This can be overridden in controllers for custom post-processing
-          # The actual logging happens in the middleware
         end
 
         # Build basic metadata for the request

@@ -14,15 +14,7 @@ describe InboundHttpLogger::Concerns::ControllerLogging do
   let(:controller_base_class) do
     Class.new do
       # Mock Rails controller methods
-      def self.before_action(*args, **kwargs)
-        # No-op for testing
-      end
-
       def self.after_action(*args, **kwargs)
-        # No-op for testing
-      end
-
-      def self.skip_before_action(*args, **kwargs)
         # No-op for testing
       end
 
