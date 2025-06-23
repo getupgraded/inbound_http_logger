@@ -1,5 +1,12 @@
 # Changelog
 
+# 0.0.3
+
+* Database adapter architecture for better maintainability and flexibility.
+* Added support for alternate database for SQLite logging.
+* Added support for test mode for SQLite logging.
+* Reduce model indices and fields
+
 # 0.0.2
 
 * Added support for callbacks in parent classes.
