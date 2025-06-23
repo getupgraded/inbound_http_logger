@@ -1,0 +1,14 @@
+# Changelog
+
+# 0.0.1
+
+* Initial release with:
+
+  - Rails integration: Rack middleware with Railtie and migration generators for seamless setup
+  - Controller integration: Concerns for metadata, loggable associations, and custom events
+  - Comprehensive logging: Request/response headers, bodies, timing, IP addresses, user agents
+  - Automatic filtering of sensitive headers and body data
+  - Performance: Early-exit logic, content type filtering, body size limits
+  - Production-safety: Failsafe error handling ensures requests never fail due to logging
+  - Configurable exclusions: URL patterns, content types, controllers, and actions
+  - Rich querying: Search, filtering, analytics, and cleanup utilities

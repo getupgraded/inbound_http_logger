@@ -1,0 +1,45 @@
+# frozen_string_literal: true
+
+class <%= migration_class_name %> < ActiveRecord::Migration[<%= ActiveRecord::Migration.current_version %>]
+  def change
+    create_table :<%= table_name %> do |t|
+      # Request information
+      t.string :request_id, index: true
+      t.string :http_method, null: false
+      t.text :url, null: false
+      t.string :ip_address
+      t.string :user_agent
+      t.string :referrer
+
+      # Request details
+      t.json :request_headers, default: {}
+      t.json :request_body
+
+      # Response details
+      t.integer :status_code, null: false
+      t.json :response_headers, default: {}
+      t.json :response_body
+
+      # Performance metrics
+      t.decimal :duration_seconds, precision: 10, scale: 6
+      t.decimal :duration_ms, precision: 10, scale: 2
+
+      # Polymorphic association
+      t.references :loggable, polymorphic: true, type: :bigint
+
+      # Metadata and timestamps
+      t.json :metadata, default: {}
+      t.timestamps
+
+      # Indexes for common queries
+      t.index :http_method
+      t.index :status_code
+      t.index :created_at
+      t.index :ip_address
+      t.index :duration_ms
+
+      # Add a partial index for failed requests
+      t.index :status_code, where: 'status_code >= 400', name: 'index_<%= table_name %>_on_failed_requests'
+    end
+  end
+end
