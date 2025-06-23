@@ -34,17 +34,13 @@ class <%= migration_class_name %> < ActiveRecord::Migration[<%= ActiveRecord::Mi
       t.decimal :duration_ms, precision: 10, scale: 2
 
       # Polymorphic association
-      t.references :loggable, polymorphic: true, type: :bigint
+      t.references :loggable, polymorphic: true, type: :bigint, index: true
 
-      # Timestamps
-      t.timestamps
+      # Timestamp - only created_at needed for append-only logs
+      t.datetime :created_at, null: false, default: -> { 'CURRENT_TIMESTAMP' }
 
       # Indexes for common queries
-      t.index :http_method
-      t.index :status_code
       t.index :created_at
-      t.index :ip_address
-      t.index :duration_ms
 
       # Add a partial index for failed requests
       t.index :status_code, where: 'status_code >= 400', name: 'index_<%= table_name %>_on_failed_requests'
