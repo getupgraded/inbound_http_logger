@@ -14,6 +14,8 @@ A production-safe gem for comprehensive inbound HTTP request logging in Rails ap
 - **Controller integration**: Concerns for metadata, loggable associations, and custom events
 - **Configurable exclusions**: URL patterns, content types, controllers, and actions
 - **Rich querying**: Search, filtering, analytics, and cleanup utilities
+- **SQLite logging**: Optional separate SQLite database for local logging and testing
+- **Test utilities**: Persistent test logging with request counting and analysis tools
 
 ## Installation
 
@@ -50,6 +52,9 @@ InboundHttpLogger.configure do |config|
 
   # Optional: Enable debug logging
   config.debug_logging = Rails.env.development?
+
+  # Optional: Enable secondary database logging
+  config.configure_secondary_database('sqlite3:///log/requests.sqlite3')
 end
 ```
 
@@ -76,14 +81,312 @@ end
 
 ## Usage
 
-Once configured, the gem automatically logs all inbound HTTP requests via Rack middleware:
+Once configured, the gem automatically logs all inbound HTTP requests to your **main Rails database** using ActiveRecord:
 
 ```ruby
-# All requests to your Rails app will be automatically logged
-# GET /users -> logged
-# POST /orders -> logged
-# PUT /products/123 -> logged
+# All requests to your Rails app will be automatically logged to your main database
+# GET /users -> logged to main Rails database
+# POST /orders -> logged to main Rails database
+# PUT /products/123 -> logged to main Rails database
+
+# Query logs using ActiveRecord
+logs = InboundHttpLogger::Models::InboundRequestLog.recent
+error_logs = InboundHttpLogger::Models::InboundRequestLog.failed
 ```
+
+## Additional Database Logging
+
+The gem supports **optional** logging to an additional database alongside the main Rails database. This provides **dual logging** - your main database gets all logs, plus an additional specialized database. This is particularly useful for:
+
+- **Local development**: Keep a separate log file for debugging
+- **Testing**: Persistent test logs that don't interfere with your main database
+- **Analytics**: Separate storage for request analytics and monitoring
+- **Performance**: Use optimized databases for logging (e.g., PostgreSQL with JSONB)
+
+### Supported Database Types
+
+- **SQLite** - Perfect for local development and testing
+- **PostgreSQL** - High-performance with JSONB support and GIN indexes
+- **MySQL** - (Future support planned)
+
+### Basic Configuration
+
+```ruby
+# config/initializers/inbound_http_logger.rb
+InboundHttpLogger.configure do |config|
+  # Enable logging to your main Rails database (default behavior)
+  config.enabled = true
+
+  # That's it! Logs will be stored in your main Rails database using ActiveRecord
+  # No additional configuration needed for basic usage
+end
+```
+
+### Additional Database Configuration (Optional)
+
+If you want to **also** log to a separate database (in addition to your main Rails database):
+
+```ruby
+# config/initializers/inbound_http_logger.rb
+InboundHttpLogger.configure do |config|
+  config.enabled = true  # Main Rails database logging
+
+  # OPTIONAL: Also log to an additional database
+
+  # SQLite (simple file-based logging)
+  config.configure_secondary_database('sqlite3:///log/requests.sqlite3')
+
+  # PostgreSQL (high-performance with JSONB)
+  config.configure_secondary_database('postgresql://user:pass@host/logs_db')
+
+  # Or use environment variable
+  config.configure_secondary_database(ENV['LOGGING_DATABASE_URL'])
+end
+```
+
+### Programmatic Control
+
+```ruby
+# Main database logging (always uses your Rails database)
+InboundHttpLogger.enable!   # Enable main database logging
+InboundHttpLogger.disable!  # Disable all logging
+InboundHttpLogger.enabled?  # Check if logging is enabled
+
+# Additional database logging (optional, in addition to main database)
+InboundHttpLogger.enable_secondary_logging!('sqlite3:///log/requests.sqlite3')
+InboundHttpLogger.enable_secondary_logging!('postgresql://user:pass@host/logs')
+InboundHttpLogger.disable_secondary_logging!
+InboundHttpLogger.secondary_logging_enabled?
+```
+
+## Test Utilities
+
+The gem provides a dedicated test namespace with powerful utilities for testing HTTP request logging:
+
+### Test Configuration
+
+```ruby
+# Configure test logging with separate database
+InboundHttpLogger::Test.configure(
+  database_url: 'sqlite3:///tmp/test_requests.sqlite3',
+  adapter: :sqlite
+)
+
+# Or use PostgreSQL for tests
+InboundHttpLogger::Test.configure(
+  database_url: 'postgresql://localhost/test_logs',
+  adapter: :postgresql
+)
+
+# Enable test logging
+InboundHttpLogger::Test.enable!
+
+# Disable test logging
+InboundHttpLogger::Test.disable!
+```
+
+### Test Utilities API
+
+```ruby
+# Count all logged requests during tests
+total_requests = InboundHttpLogger::Test.logs_count
+
+# Count requests by status code
+successful_requests = InboundHttpLogger::Test.logs_with_status(200)
+error_requests = InboundHttpLogger::Test.logs_with_status(500)
+
+# Count requests for specific paths
+api_requests = InboundHttpLogger::Test.logs_for_path('/api/')
+user_requests = InboundHttpLogger::Test.logs_for_path('/users')
+
+# Get all logged requests
+all_logs = InboundHttpLogger::Test.all_logs
+
+# Get logs matching specific criteria
+failed_requests = InboundHttpLogger::Test.logs_matching(status: 500)
+api_posts = InboundHttpLogger::Test.logs_matching(method: 'POST', path: '/api')
+
+# Analyze request patterns
+analysis = InboundHttpLogger::Test.analyze
+# Returns: { total_requests: 100, success_rate: 95.0, error_rate: 5.0, ... }
+
+# Clear test logs manually (if needed)
+InboundHttpLogger::Test.clear_logs!
+
+# Reset test environment
+InboundHttpLogger::Test.reset!
+```
+
+### Test Framework Integration
+
+#### System Test Setup (Capybara/Playwright)
+
+For system tests that make real HTTP requests through a browser, you need to enable both main logging and test utilities:
+
+```ruby
+# test/application_system_test_case.rb
+class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
+  include InboundHttpLogger::Test::Helpers
+
+  setup do
+    # Enable main database logging (captures middleware requests)
+    InboundHttpLogger.enable!
+
+    # Enable test utilities (for assertions)
+    setup_inbound_http_logger_test(database_url: 'sqlite3:///tmp/system_test_requests.sqlite3')
+  end
+
+  teardown do
+    teardown_inbound_http_logger_test
+  end
+end
+
+# In your system tests
+class CheckoutSystemTest < ApplicationSystemTestCase
+  test "logs checkout flow requests" do
+    visit '/checkout'
+    fill_in 'Email', with: 'user@example.com'
+    click_on 'Continue'
+
+    # Assert that HTTP requests were logged during the flow
+    assert_request_count(2)  # Expected number of requests
+    assert_request_logged('GET', '/checkout')
+    assert_request_logged('POST', '/checkout/email')
+  end
+end
+```
+
+#### Minitest Setup (Unit/Integration Tests)
+
+```ruby
+# test/test_helper.rb
+class ActiveSupport::TestCase
+  include InboundHttpLogger::Test::Helpers
+
+  setup do
+    setup_inbound_http_logger_test(
+      database_url: 'sqlite3:///tmp/test_requests.sqlite3'
+    )
+  end
+
+  teardown do
+    teardown_inbound_http_logger_test
+  end
+end
+
+# In your tests
+class APITest < ActiveSupport::TestCase
+  test "logs API requests correctly" do
+    get '/api/users'
+    post '/api/users', params: { name: 'John' }
+
+    # Use helper methods
+    assert_request_logged('GET', '/api/users', status: 200)
+    assert_request_logged('POST', '/api/users', status: 201)
+    assert_request_count(2)
+
+    # Or use direct API
+    assert_equal 2, InboundHttpLogger::Test.logs_count
+    assert_equal 1, InboundHttpLogger::Test.logs_with_status(200)
+    assert_equal 1, InboundHttpLogger::Test.logs_with_status(201)
+  end
+
+  test "analyzes request patterns" do
+    get '/api/users'    # 200
+    get '/api/missing'  # 404
+
+    analysis = InboundHttpLogger::Test.analyze
+    assert_equal 2, analysis[:total_requests]
+    assert_equal 50.0, analysis[:success_rate]
+    assert_equal 50.0, analysis[:error_rate]
+  end
+end
+```
+
+#### RSpec Setup
+
+```ruby
+# spec/rails_helper.rb
+RSpec.configure do |config|
+  config.include InboundHttpLogger::Test::Helpers
+
+  config.before(:each) do
+    setup_inbound_http_logger_test
+  end
+
+  config.after(:each) do
+    teardown_inbound_http_logger_test
+  end
+end
+
+# In your specs
+RSpec.describe "API logging" do
+  it "logs requests correctly" do
+    get '/api/users'
+
+    expect(InboundHttpLogger::Test.logs_count).to eq(1)
+    assert_request_logged('GET', '/api/users')
+    assert_success_rate(100.0)
+  end
+end
+```
+
+
+
+### ActiveRecord Integration
+
+- **Native ActiveRecord**: All database operations use ActiveRecord models and migrations
+- **Rails-native**: Integrates seamlessly with your existing Rails database setup
+- **Default connection**: Uses your main Rails database connection by default
+- **Multiple database support**: Additional databases use Rails' `connects_to` for proper connection pooling
+- **Migration support**: Includes Rails generator for creating the required database table
+
+### Database Features
+
+- **Automatic table creation**: Database tables are created automatically via ActiveRecord migrations
+- **Thread-safe**: Safe for concurrent access with proper ActiveRecord connection pooling
+- **Graceful degradation**: If database gems are not available, logging is disabled with warnings
+- **Dual logging**: When additional database is configured, logs go to both main and additional databases
+- **Independent operation**: Additional database logging works independently of main database
+- **Database-specific optimizations**:
+  - PostgreSQL uses JSONB columns with GIN indexes for fast JSON queries
+  - SQLite uses JSON columns with appropriate indexes
+  - Automatic adapter detection and optimization
+
+## Features Overview
+
+The gem provides a clean, modern API for HTTP request logging with multiple database support:
+
+#### Secondary Database Configuration
+
+```ruby
+# Configure secondary database logging
+config.configure_secondary_database('sqlite3:///log/requests.sqlite3')
+
+# Or use PostgreSQL for better performance
+config.configure_secondary_database('postgresql://user:pass@host/logs_db')
+
+# Programmatic control
+InboundHttpLogger.enable_secondary_logging!('sqlite3:///log/requests.sqlite3')
+InboundHttpLogger.disable_secondary_logging!
+```
+
+#### Test Setup
+
+```ruby
+# Configure test logging
+InboundHttpLogger::Test.configure(database_url: 'sqlite3:///tmp/test.sqlite3')
+InboundHttpLogger::Test.enable!
+count = InboundHttpLogger::Test.logs_count
+```
+
+### Key Benefits
+
+- **High performance**: PostgreSQL with JSONB support and GIN indexes
+- **Flexible storage**: Support for SQLite, PostgreSQL, and future database adapters
+- **Comprehensive testing**: Dedicated test utilities with framework integration
+- **Clean architecture**: Proper namespace separation and modern API design
+- **Production ready**: Uses Rails' multiple database support and connection pooling
 
 ### Controller Integration
 
@@ -231,7 +534,6 @@ class ApplicationController < ActionController::Base
     end
   end
 end
-```
 ```
 
 ### Querying Logs
@@ -409,11 +711,149 @@ The gem is fully thread-safe and uses thread-local variables for request-specifi
 
 All logging operations are wrapped in failsafe error handling. If logging fails for any reason, the original HTTP request continues normally and the error is logged to Rails.logger.
 
+## API Reference
+
+### Main Module Methods
+
+```ruby
+# Main Database Configuration (uses your Rails database)
+InboundHttpLogger.configure { |config| ... }
+InboundHttpLogger.configuration
+InboundHttpLogger.enable!   # Enable logging to main Rails database
+InboundHttpLogger.disable!  # Disable all logging
+InboundHttpLogger.enabled?  # Check if main database logging is enabled
+
+# Additional Database Logging (optional, in addition to main database)
+InboundHttpLogger.enable_secondary_logging!(url, adapter: :sqlite)
+InboundHttpLogger.disable_secondary_logging!
+InboundHttpLogger.secondary_logging_enabled?
+```
+
+### Test Module Methods
+
+```ruby
+# Configuration
+InboundHttpLogger::Test.configure(database_url:, adapter:)
+InboundHttpLogger::Test.enable!
+InboundHttpLogger::Test.disable!
+InboundHttpLogger::Test.enabled?
+
+# Logging
+InboundHttpLogger::Test.log_request(request, body, status, headers, response, duration)
+
+# Querying
+InboundHttpLogger::Test.logs_count
+InboundHttpLogger::Test.logs_with_status(status)
+InboundHttpLogger::Test.logs_for_path(path)
+InboundHttpLogger::Test.all_logs
+InboundHttpLogger::Test.logs_matching(criteria)
+InboundHttpLogger::Test.analyze
+
+# Management
+InboundHttpLogger::Test.clear_logs!
+InboundHttpLogger::Test.reset!
+```
+
+### Test Helpers
+
+```ruby
+# Include in test classes
+include InboundHttpLogger::Test::Helpers
+
+# Helper methods
+setup_inbound_http_logger_test(database_url:, adapter:)
+teardown_inbound_http_logger_test
+assert_request_logged(method, path, status:)
+assert_request_count(expected_count, criteria = {})
+assert_success_rate(expected_rate, tolerance: 0.1)
+```
+
+### Model Methods
+
+```ruby
+# Querying
+InboundHttpLogger::Models::InboundRequestLog.search(params)
+InboundHttpLogger::Models::InboundRequestLog.recent
+InboundHttpLogger::Models::InboundRequestLog.with_status(status)
+InboundHttpLogger::Models::InboundRequestLog.with_method(method)
+InboundHttpLogger::Models::InboundRequestLog.successful
+InboundHttpLogger::Models::InboundRequestLog.failed
+InboundHttpLogger::Models::InboundRequestLog.slow(threshold_ms)
+
+# PostgreSQL JSONB methods
+InboundHttpLogger::Models::InboundRequestLog.with_response_containing(key, value)
+InboundHttpLogger::Models::InboundRequestLog.with_request_containing(key, value)
+
+# Management
+InboundHttpLogger::Models::InboundRequestLog.cleanup(older_than_days)
+```
+
+### Configuration Options
+
+```ruby
+config.enabled = true                    # Enable/disable logging
+config.debug_logging = false            # Enable debug output
+config.max_body_size = 10_000           # Max body size to log (bytes)
+config.log_level = :info                # Log level
+
+# Secondary database
+config.configure_secondary_database(url, adapter: :sqlite)
+config.secondary_database_url = 'sqlite3:///path'
+config.secondary_database_adapter = :postgresql
+
+# Exclusions
+config.excluded_paths << /pattern/
+config.excluded_content_types << 'text/html'
+config.sensitive_headers << 'x-custom-token'
+config.sensitive_body_keys << 'secret_field'
+config.exclude_controller('controller_name')
+config.exclude_action('controller_name', 'action_name')
+```
+
 ## Development
 
+### Running Tests
+
 ```bash
+# Install dependencies
 bundle install
+
+# Run gem tests
 bundle exec rake test
+
+# Run system tests (from parent Rails app)
+cd ../..
+rails test test/system/
+
+# Run specific system test with HTTP logging
+rails test test/system/affirm/accepted_test.rb
+```
+
+### System Test Requirements
+
+For system tests to work with HTTP logging, ensure:
+
+1. **Main logging enabled**: `InboundHttpLogger.enable!` in system test setup
+2. **Test utilities configured**: `setup_inbound_http_logger_test` with database URL
+3. **Middleware active**: The Rails middleware stack includes the logging middleware
+4. **Database setup**: Test database can be SQLite or PostgreSQL
+
+### Debugging System Tests
+
+If system tests aren't logging requests:
+
+```ruby
+# Check if logging is enabled
+puts "Main logging: #{InboundHttpLogger.enabled?}"
+puts "Test logging: #{InboundHttpLogger::Test.enabled?}"
+
+# Check middleware is active
+middleware_names = Rails.application.middleware.map(&:name)
+puts "Middleware active: #{middleware_names.include?('InboundHttpLogger::Middleware::LoggingMiddleware')}"
+
+# Check request counts
+puts "Main DB requests: #{InboundHttpLogger::Models::InboundRequestLog.count}"
+puts "Test DB requests: #{InboundHttpLogger::Test.logs_count}"
 ```
 
 ## License

@@ -5,6 +5,7 @@ require 'set'
 module InboundHttpLogger
   class Configuration
     attr_accessor :enabled, :debug_logging, :max_body_size, :log_level
+    attr_accessor :secondary_database_url, :secondary_database_adapter
     attr_reader :excluded_paths, :excluded_content_types, :sensitive_headers, :sensitive_body_keys
     attr_reader :excluded_controllers, :excluded_actions
 
@@ -13,6 +14,10 @@ module InboundHttpLogger
       @debug_logging = false
       @max_body_size = 10_000 # 10KB default
       @log_level = :info
+
+      # Secondary database configuration
+      @secondary_database_url = nil
+      @secondary_database_adapter = :sqlite
 
       # Default exclusions for paths
       @excluded_paths = Set.new([
@@ -195,7 +200,40 @@ module InboundHttpLogger
       end
     end
 
+    # Check if secondary database logging is enabled
+    def secondary_database_enabled?
+      @secondary_database_url.present?
+    end
+
+    # Get the secondary database adapter instance
+    def secondary_database_adapter_instance
+      return nil unless secondary_database_enabled?
+
+      @secondary_adapter ||= create_secondary_adapter
+    end
+
+    # Configure secondary database
+    def configure_secondary_database(url, adapter: :sqlite)
+      @secondary_database_url = url
+      @secondary_database_adapter = adapter
+      @secondary_adapter = nil # Reset cached adapter
+    end
+
     private
+
+      def create_secondary_adapter
+        case @secondary_database_adapter.to_sym
+        when :sqlite
+          require_relative 'database_adapters/sqlite_adapter'
+          DatabaseAdapters::SqliteAdapter.new(@secondary_database_url)
+        when :postgresql
+          require_relative 'database_adapters/postgresql_adapter'
+          DatabaseAdapters::PostgresqlAdapter.new(@secondary_database_url)
+        else
+          logger.error("Unsupported secondary database adapter: #{@secondary_database_adapter}")
+          nil
+        end
+      end
 
       # Recursively filter sensitive data from hashes and arrays
       def filter_sensitive_data_internal(data)

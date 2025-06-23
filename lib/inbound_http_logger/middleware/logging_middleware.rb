@@ -147,6 +147,7 @@ module InboundHttpLogger
 
         # Log the request
         def log_request(request, request_body, status, headers, response_body, duration_seconds)
+          # Log to main database
           InboundHttpLogger::Models::InboundRequestLog.log_request(
             request,
             request_body,
@@ -155,6 +156,17 @@ module InboundHttpLogger
             response_body,
             duration_seconds
           )
+
+          # Also log to secondary database if enabled
+          if InboundHttpLogger.configuration.secondary_database_enabled?
+            adapter = InboundHttpLogger.configuration.secondary_database_adapter_instance
+            adapter&.log_request(request, request_body, status, headers, response_body, duration_seconds)
+          end
+
+          # Also log to test database if test module is enabled
+          if InboundHttpLogger::Test.enabled?
+            InboundHttpLogger::Test.log_request(request, request_body, status, headers, response_body, duration_seconds)
+          end
         end
     end
   end

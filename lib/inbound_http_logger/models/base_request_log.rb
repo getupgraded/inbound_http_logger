@@ -1,13 +1,12 @@
 # frozen_string_literal: true
 
 require 'active_record'
-require 'set'
-require 'rack'
 
 module InboundHttpLogger
   module Models
-    class InboundRequestLog < ActiveRecord::Base
-      self.table_name = 'inbound_request_logs'
+    # Shared base class for request logging functionality
+    class BaseRequestLog < ActiveRecord::Base
+      self.abstract_class = true
 
       # Associations
       belongs_to :loggable, polymorphic: true, optional: true
@@ -27,87 +26,59 @@ module InboundHttpLogger
       scope :failed, -> { where('status_code >= 400') }
       scope :slow, ->(threshold_ms = 1000) { where('duration_ms > ?', threshold_ms) }
 
-      # JSONB-specific scopes for PostgreSQL
-      scope :with_response_containing, lambda { |key, value|
-        if using_jsonb?
-          where("response_body @> ?", { key => value }.to_json)
-        else
-          where("JSON_EXTRACT(response_body, ?) = ?", "$.#{key}", value.to_s)
-        end
-      }
-
-      scope :with_request_containing, lambda { |key, value|
-        if using_jsonb?
-          where("request_body @> ?", { key => value }.to_json)
-        else
-          where("JSON_EXTRACT(request_body, ?) = ?", "$.#{key}", value.to_s)
-        end
-      }
-
-      # JSON columns are automatically handled in Rails 8.0+
-
-      # Check if we're using JSONB (PostgreSQL) or regular JSON
-      # Memoized for performance since this is called on every log entry
-      def self.using_jsonb?
-        # Use a class variable for thread-safe memoization
-        @@using_jsonb ||= connection.adapter_name == 'PostgreSQL' &&
-                          columns_hash['response_body']&.sql_type == 'jsonb'
-      end
-
-      # Class methods for logging
       class << self
-        # Log a completed request
+        # Main logging method - to be implemented by subclasses
         def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
-          return nil unless InboundHttpLogger.enabled?
+          raise NotImplementedError, "Subclasses must implement log_request"
+        end
+
+        # Shared logging logic
+        def build_log_data(request, request_body, status, headers, response_body, duration_seconds, options = {})
+          return nil unless request&.path
           return nil unless InboundHttpLogger.configuration.should_log_path?(request.path)
 
-          # Content type filtering is handled by middleware
+          # Calculate duration in milliseconds
+          duration_ms = (duration_seconds * 1000).round(2)
 
-          begin
-            # Calculate duration in milliseconds
-            duration_ms = (duration_seconds * 1000).round(2)
+          # Get metadata and loggable from thread-local or options
+          metadata = Thread.current[:inbound_http_logger_metadata] || options[:metadata] || {}
+          loggable = Thread.current[:inbound_http_logger_loggable] || options[:loggable]
 
-            # Get metadata and loggable from thread-local or options
-            metadata = Thread.current[:inbound_http_logger_metadata] || options[:metadata] || {}
-            loggable = Thread.current[:inbound_http_logger_loggable] || options[:loggable]
-
-            # Add controller/action to metadata if available
-            if request.env['action_controller.instance']
-              controller = request.env['action_controller.instance']
-              metadata = metadata.merge(
-                controller: controller.controller_name,
-                action: controller.action_name
-              )
-            end
-
-            # Filter sensitive data
-            filtered_request_headers = InboundHttpLogger.configuration.filter_headers(extract_request_headers(request))
-            filtered_response_headers = InboundHttpLogger.configuration.filter_headers(headers)
-            filtered_request_body = filter_body_for_storage(request_body)
-            filtered_response_body = filter_body_for_storage(response_body)
-
-            # Create the log entry
-            create!(
-              request_id: request.env['action_dispatch.request_id'] || SecureRandom.uuid,
-              http_method: request.request_method,
-              url: request.fullpath,
-              ip_address: request.ip,
-              user_agent: request.user_agent || request.env['HTTP_USER_AGENT'],
-              referrer: request.referer || request.env['HTTP_REFERER'],
-              request_headers: filtered_request_headers,
-              request_body: filtered_request_body,
-              status_code: status,
-              response_headers: filtered_response_headers,
-              response_body: filtered_response_body,
-              duration_seconds: duration_seconds,
-              duration_ms: duration_ms,
-              loggable: loggable,
-              metadata: metadata
+          # Add controller/action to metadata if available
+          if request.env['action_controller.instance']
+            controller = request.env['action_controller.instance']
+            metadata = metadata.merge(
+              controller: controller.controller_name,
+              action: controller.action_name
             )
-          rescue => e
-            InboundHttpLogger.configuration.logger.error("Error logging inbound request: #{e.class}: #{e.message}")
-            nil
           end
+
+          # Filter sensitive data
+          filtered_request_headers = InboundHttpLogger.configuration.filter_headers(extract_request_headers(request))
+          filtered_response_headers = InboundHttpLogger.configuration.filter_headers(headers)
+          filtered_request_body = filter_body_for_storage(request_body)
+          filtered_response_body = filter_body_for_storage(response_body)
+
+          {
+            request_id: request.env['action_dispatch.request_id'] || SecureRandom.uuid,
+            http_method: request.request_method,
+            url: request.fullpath,
+            ip_address: request.ip,
+            user_agent: request.user_agent || request.env['HTTP_USER_AGENT'],
+            referrer: request.referer || request.env['HTTP_REFERER'],
+            request_headers: filtered_request_headers,
+            request_body: filtered_request_body,
+            status_code: status,
+            response_headers: filtered_response_headers,
+            response_body: filtered_response_body,
+            duration_seconds: duration_seconds,
+            duration_ms: duration_ms,
+            loggable_type: loggable&.class&.name,
+            loggable_id: loggable&.id,
+            metadata: metadata,
+            created_at: Time.current.utc,
+            updated_at: Time.current.utc
+          }
         end
 
         # Search logs by various criteria
@@ -117,18 +88,7 @@ module InboundHttpLogger
           # General search
           if params[:q].present?
             q = "%#{params[:q].downcase}%"
-            if using_jsonb?
-              # Use JSONB operators for better performance
-              scope = scope.where(
-                'LOWER(url) LIKE ? OR request_body::text ILIKE ? OR response_body::text ILIKE ?',
-                q, "%#{params[:q]}%", "%#{params[:q]}%"
-              )
-            else
-              scope = scope.where(
-                'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
-                q, q, q
-              )
-            end
+            scope = apply_text_search(scope, q, params[:q])
           end
 
           # Filter by status
@@ -177,29 +137,20 @@ module InboundHttpLogger
 
         private
 
-          # Filter body for storage, handling JSONB vs JSON columns differently
+          # Database-specific text search - to be overridden by subclasses
+          def apply_text_search(scope, q, original_query)
+            scope.where(
+              'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
+              q, q, q
+            )
+          end
+
+          # Filter body for storage - to be overridden by subclasses if needed
           def filter_body_for_storage(body)
             return body unless body.is_a?(String) && body.present?
             return body if body.bytesize > InboundHttpLogger.configuration.max_body_size
 
-            # For JSONB columns, we want to store parsed JSON objects to avoid double-parsing
-            if using_jsonb?
-              filter_body_for_jsonb(body)
-            else
-              # For regular JSON columns, use the standard filtering (which re-serializes)
-              InboundHttpLogger.configuration.filter_body(body)
-            end
-          end
-
-          # Filter body for JSONB storage - returns parsed object or original string
-          def filter_body_for_jsonb(body)
-            # Try to parse as JSON
-            parsed = JSON.parse(body)
-            # Filter sensitive data and return the parsed object (not re-serialized)
-            InboundHttpLogger.configuration.filter_sensitive_data(parsed)
-          rescue JSON::ParserError
-            # If not JSON, return as-is
-            body
+            InboundHttpLogger.configuration.filter_body(body)
           end
 
           # Extract request headers from Rack env
@@ -207,7 +158,7 @@ module InboundHttpLogger
             headers = {}
             request.env.each do |key, value|
               if key.start_with?('HTTP_')
-                header_name = key[5..-1].split('_').map(&:capitalize).join('-')
+                header_name = key[5..].split('_').map(&:capitalize).join('-')
                 headers[header_name] = value
               elsif %w[CONTENT_TYPE CONTENT_LENGTH].include?(key)
                 header_name = key.split('_').map(&:capitalize).join('-')

@@ -12,9 +12,11 @@ end
 
 require_relative "inbound_http_logger/version"
 require_relative "inbound_http_logger/configuration"
+require_relative "inbound_http_logger/models/base_request_log"
 require_relative "inbound_http_logger/models/inbound_request_log"
 require_relative "inbound_http_logger/middleware/logging_middleware"
 require_relative "inbound_http_logger/concerns/controller_logging"
+require_relative "inbound_http_logger/test"
 require_relative "inbound_http_logger/railtie" if defined?(Rails)
 
 module InboundHttpLogger
@@ -42,9 +44,7 @@ module InboundHttpLogger
     end
 
     # Check if logging is enabled
-    def enabled?
-      configuration.enabled?
-    end
+    delegate :enabled?, to: :configuration
 
     # Check if logging is enabled for a specific controller/action
     def enabled_for?(controller_name, action_name = nil)
@@ -68,5 +68,36 @@ module InboundHttpLogger
       Thread.current[:inbound_http_logger_metadata] = nil
       Thread.current[:inbound_http_logger_loggable] = nil
     end
+
+    # Secondary database logging methods
+
+    # Enable secondary database logging
+    def enable_secondary_logging!(database_url = nil, adapter: :sqlite)
+      database_url ||= default_secondary_database_url(adapter)
+      configuration.configure_secondary_database(database_url, adapter: adapter)
+    end
+
+    # Disable secondary database logging
+    def disable_secondary_logging!
+      configuration.configure_secondary_database(nil)
+    end
+
+    # Check if secondary database logging is enabled
+    def secondary_logging_enabled?
+      configuration.secondary_database_enabled?
+    end
+
+    private
+
+      def default_secondary_database_url(adapter)
+        case adapter.to_sym
+        when :sqlite
+          'log/inbound_http_requests.sqlite3'
+        when :postgresql
+          ENV['INBOUND_HTTP_LOGGER_DATABASE_URL'] || 'postgresql://localhost/inbound_http_logger'
+        else
+          raise ArgumentError, "No default URL for adapter: #{adapter}"
+        end
+      end
   end
 end
