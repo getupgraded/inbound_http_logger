@@ -171,6 +171,11 @@ module InboundHttpLogger
 
       # Instance methods
 
+      # Get a formatted string of the request method and URL
+      def formatted_call
+        "#{http_method} #{url}"
+      end
+
       # Get a formatted string of the request
       def formatted_request
         "#{http_method} #{url}\n#{formatted_headers(request_headers)}\n\n#{formatted_body(request_body)}"

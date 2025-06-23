@@ -21,20 +21,6 @@ module InboundHttpLogger
         raise NotImplementedError, "Subclasses must implement model_class"
       end
 
-      # Log a request using this adapter
-      def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
-        return nil unless enabled?
-        return nil unless InboundHttpLogger.configuration.should_log_path?(request&.path)
-
-        begin
-          ensure_connection_and_table
-          model_class.log_request(request, request_body, status, headers, response_body, duration_seconds, options)
-        rescue => e
-          InboundHttpLogger.configuration.logger.error("Error logging to #{adapter_name}: #{e.class}: #{e.message}")
-          nil
-        end
-      end
-
       # Count logs
       def count_logs
         return 0 unless enabled?
@@ -102,6 +88,7 @@ module InboundHttpLogger
       # Log a request to the database
       def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
         return nil unless enabled?
+        return nil unless InboundHttpLogger.configuration.should_log_path?(request&.path)
 
         begin
           ensure_connection_and_table

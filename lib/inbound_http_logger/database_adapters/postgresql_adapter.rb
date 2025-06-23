@@ -97,12 +97,12 @@ module InboundHttpLogger
                 def prepare_json_data_for_postgresql(log_data)
                   # Convert JSON strings back to objects for JSONB storage
                   %i[request_headers request_body response_headers response_body metadata].each do |field|
-                    if log_data[field].is_a?(String) && log_data[field].present?
-                      begin
-                        log_data[field] = JSON.parse(log_data[field])
-                      rescue JSON::ParserError
-                        # Keep as string if not valid JSON
-                      end
+                    next unless log_data[field].is_a?(String) && log_data[field].present?
+
+                    begin
+                      log_data[field] = JSON.parse(log_data[field])
+                    rescue JSON::ParserError
+                      # Keep as string if not valid JSON
                     end
                   end
 

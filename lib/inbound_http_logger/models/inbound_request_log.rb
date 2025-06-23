@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'active_record'
-require 'set'
 require 'rack'
 
 module InboundHttpLogger

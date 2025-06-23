@@ -26,8 +26,7 @@ module InboundHttpLogger
         return [status, headers, response] unless should_log_response?(request, status, headers)
 
         # Capture response body if needed
-        response_body = should_capture_response_body?(request, status, headers) ?
-                       read_response_body(response) : nil
+        response_body = (read_response_body(response) if should_capture_response_body?(request, status, headers))
 
         # Calculate duration
         end_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -164,9 +163,9 @@ module InboundHttpLogger
           end
 
           # Also log to test database if test module is enabled
-          if InboundHttpLogger::Test.enabled?
-            InboundHttpLogger::Test.log_request(request, request_body, status, headers, response_body, duration_seconds)
-          end
+          return unless InboundHttpLogger::Test.enabled?
+
+          InboundHttpLogger::Test.log_request(request, request_body, status, headers, response_body, duration_seconds)
         end
     end
   end

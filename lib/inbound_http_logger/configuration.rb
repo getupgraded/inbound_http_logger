@@ -114,7 +114,7 @@ module InboundHttpLogger
     def should_log_path?(path)
       return false unless path
 
-      !@excluded_paths.any? { |pattern| pattern.match?(path) }
+      @excluded_paths.none? { |pattern| pattern.match?(path) }
     end
 
     # Check if we should log a specific content type
@@ -132,9 +132,7 @@ module InboundHttpLogger
     def enabled_for_controller?(controller_name, action_name = nil)
       return false if @excluded_controllers.include?(controller_name.to_s)
 
-      if action_name && @excluded_actions[controller_name.to_s]
-        return false if @excluded_actions[controller_name.to_s].include?(action_name.to_s)
-      end
+      return false if action_name && @excluded_actions[controller_name.to_s]&.include?(action_name.to_s)
 
       true
     end
@@ -158,11 +156,11 @@ module InboundHttpLogger
       filtered = {}
       headers.each do |key, value|
         header_key = key.to_s.downcase
-        if @sensitive_headers.any? { |sensitive| header_key.include?(sensitive) }
-          filtered[key] = '[FILTERED]'
-        else
-          filtered[key] = value
-        end
+        filtered[key] = if @sensitive_headers.any? { |sensitive| header_key.include?(sensitive) }
+                          '[FILTERED]'
+                        else
+                          value
+                        end
       end
       filtered
     end
@@ -190,14 +188,12 @@ module InboundHttpLogger
 
     # Get the logger instance
     def logger
-      @logger ||= begin
-        if defined?(Rails) && Rails.respond_to?(:logger) && Rails.logger
-          Rails.logger
-        else
-          require 'logger'
-          Logger.new(STDOUT)
-        end
-      end
+      @logger ||= if defined?(Rails) && Rails.respond_to?(:logger) && Rails.logger
+                    Rails.logger
+                  else
+                    require 'logger'
+                    Logger.new($stdout)
+                  end
     end
 
     # Check if secondary database logging is enabled
@@ -209,14 +205,14 @@ module InboundHttpLogger
     def secondary_database_adapter_instance
       return nil unless secondary_database_enabled?
 
-      @secondary_adapter ||= create_secondary_adapter
+      @secondary_database_adapter_instance ||= create_secondary_adapter
     end
 
     # Configure secondary database
     def configure_secondary_database(url, adapter: :sqlite)
       @secondary_database_url = url
       @secondary_database_adapter = adapter
-      @secondary_adapter = nil # Reset cached adapter
+      @secondary_database_adapter_instance = nil # Reset cached adapter
     end
 
     private
@@ -242,11 +238,11 @@ module InboundHttpLogger
           filtered = {}
           data.each do |key, value|
             key_str = key.to_s.downcase
-            if @sensitive_body_keys.any? { |sensitive| key_str.include?(sensitive) }
-              filtered[key] = '[FILTERED]'
-            else
-              filtered[key] = filter_sensitive_data_internal(value)
-            end
+            filtered[key] = if @sensitive_body_keys.any? { |sensitive| key_str.include?(sensitive) }
+                              '[FILTERED]'
+                            else
+                              filter_sensitive_data_internal(value)
+                            end
           end
           filtered
         when Array

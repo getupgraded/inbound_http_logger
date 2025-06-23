@@ -29,7 +29,7 @@ module InboundHttpLogger
       # Log a request in test mode
       def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
         return unless enabled?
-        
+
         @test_adapter.log_request(request, request_body, status, headers, response_body, duration_seconds, options)
       end
 
@@ -57,6 +57,12 @@ module InboundHttpLogger
         @test_adapter.all_logs
       end
 
+      # Get all logs as simple calls
+      def all_calls
+        return [] unless enabled?
+        all_logs.map(&:formatted_call)
+      end
+
       # Clear all test logs
       def clear_logs!
         return unless enabled?
@@ -66,39 +72,39 @@ module InboundHttpLogger
       # Get logs matching criteria
       def logs_matching(criteria = {})
         return [] unless enabled?
-        
+
         scope = @test_adapter.model_class.all
-        
+
         if criteria[:status]
           scope = scope.where(status_code: criteria[:status])
         end
-        
+
         if criteria[:method]
           scope = scope.where(http_method: criteria[:method].to_s.upcase)
         end
-        
+
         if criteria[:path]
           scope = scope.where("url LIKE ?", "%#{criteria[:path]}%")
         end
-        
+
         if criteria[:ip_address]
           scope = scope.where(ip_address: criteria[:ip_address])
         end
-        
+
         scope.order(created_at: :desc)
       end
 
       # Analyze request patterns
       def analyze
         return {} unless enabled?
-        
+
         total_requests = logs_count
         return { total_requests: 0 } if total_requests.zero?
-        
+
         successful_requests = logs_with_status_range(200..299)
         client_error_requests = logs_with_status_range(400..499)
         server_error_requests = logs_with_status_range(500..599)
-        
+
         {
           total_requests: total_requests,
           successful_requests: successful_requests,
@@ -119,7 +125,7 @@ module InboundHttpLogger
 
         def create_adapter(database_url, adapter_type)
           database_url ||= default_test_database_url(adapter_type)
-          
+
           case adapter_type.to_sym
           when :sqlite
             require_relative 'database_adapters/sqlite_adapter'
@@ -145,7 +151,7 @@ module InboundHttpLogger
 
         def logs_with_status_range(range)
           return 0 unless enabled?
-          
+
           @test_adapter.model_class.where(status_code: range).count
         end
     end
@@ -167,9 +173,9 @@ module InboundHttpLogger
       def assert_request_logged(method, path, status: nil)
         criteria = { method: method, path: path }
         criteria[:status] = status if status
-        
+
         logs = InboundHttpLogger::Test.logs_matching(criteria)
-        
+
         if defined?(assert) # Minitest
           assert logs.any?, "Expected request to be logged: #{method.upcase} #{path}"
         elsif defined?(expect) # RSpec
@@ -177,7 +183,7 @@ module InboundHttpLogger
         else
           raise "No test framework detected"
         end
-        
+
         logs.first
       end
 
@@ -188,7 +194,7 @@ module InboundHttpLogger
                       else
                         InboundHttpLogger::Test.logs_matching(criteria).count
                       end
-        
+
         if defined?(assert_equal) # Minitest
           assert_equal expected_count, actual_count
         elsif defined?(expect) # RSpec
@@ -202,7 +208,7 @@ module InboundHttpLogger
       def assert_success_rate(expected_rate, tolerance: 0.1)
         analysis = InboundHttpLogger::Test.analyze
         actual_rate = analysis[:success_rate]
-        
+
         if defined?(assert_in_delta) # Minitest
           assert_in_delta expected_rate, actual_rate, tolerance
         elsif defined?(expect) # RSpec
