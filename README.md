@@ -854,6 +854,14 @@ rails test test/system/
 rails test test/system/affirm/accepted_test.rb
 ```
 
+### Git Hooks
+
+Use the provided `pre-commit` hook to run RuboCop before each commit:
+
+```bash
+git config core.hooksPath githooks
+```
+
 ### System Test Requirements
 
 For system tests to work with HTTP logging, ensure:

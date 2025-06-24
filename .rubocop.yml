@@ -19,6 +19,7 @@ AllCops:
     - 'bin/**/*'
     - 'sig/**/*'
     - 'lib/inbound_http_logger/generators/templates/**/*'
+    - 'README.md'
 
 # Gem-specific overrides
 Style/Documentation:

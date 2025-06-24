@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Run rubocop before committing
+bundle exec rubocop --config ./.rubocop.yml
+status=$?
+if [ $status -ne 0 ]; then
+  echo "RuboCop found issues. Commit aborted." >&2
+  exit $status
+fi

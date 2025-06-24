@@ -5,7 +5,7 @@ require 'active_record'
 module InboundHttpLogger
   module Models
     # Shared base class for request logging functionality
-    class BaseRequestLog < ActiveRecord::Base
+    class BaseRequestLog < ApplicationRecord
       self.abstract_class = true
 
       # Associations
@@ -29,7 +29,7 @@ module InboundHttpLogger
       class << self
         # Main logging method - to be implemented by subclasses
         def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
-          raise NotImplementedError, "Subclasses must implement log_request"
+          raise NotImplementedError, 'Subclasses must implement log_request'
         end
 
         # Shared logging logic
@@ -104,9 +104,7 @@ module InboundHttpLogger
           end
 
           # Filter by IP address
-          if params[:ip_address].present?
-            scope = scope.where(ip_address: params[:ip_address])
-          end
+          scope = scope.where(ip_address: params[:ip_address]) if params[:ip_address].present?
 
           # Filter by loggable
           if params[:loggable_id].present? && params[:loggable_type].present?
@@ -118,12 +116,20 @@ module InboundHttpLogger
 
           # Filter by date range
           if params[:start_date].present?
-            start_date = Time.zone.parse(params[:start_date]).beginning_of_day rescue nil
+            start_date = begin
+              Time.zone.parse(params[:start_date]).beginning_of_day
+            rescue StandardError
+              nil
+            end
             scope = scope.where('created_at >= ?', start_date) if start_date
           end
 
           if params[:end_date].present?
-            end_date = Time.zone.parse(params[:end_date]).end_of_day rescue nil
+            end_date = begin
+              Time.zone.parse(params[:end_date]).end_of_day
+            rescue StandardError
+              nil
+            end
             scope = scope.where('created_at <= ?', end_date) if end_date
           end
 
@@ -138,7 +144,7 @@ module InboundHttpLogger
         private
 
           # Database-specific text search - to be overridden by subclasses
-          def apply_text_search(scope, q, original_query)
+          def apply_text_search(scope, q, _original_query)
             scope.where(
               'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
               q, q, q
