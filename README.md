@@ -854,6 +854,15 @@ rails test test/system/
 rails test test/system/affirm/accepted_test.rb
 ```
 
+### Git Hooks
+
+Use the provided `pre-commit` hook to run RuboCop before each commit:
+
+```bash
+# we use RVM inhouse, so we assume that. Adjust as you see fit (or skip hooks, the same checks happen in CI anyway)
+git config core.hooksPath githooks
+```
+
 ### System Test Requirements
 
 For system tests to work with HTTP logging, ensure:
@@ -880,6 +889,14 @@ puts "Middleware active: #{middleware_names.include?('InboundHttpLogger::Middlew
 puts "Main DB requests: #{InboundHttpLogger::Models::InboundRequestLog.count}"
 puts "Test DB requests: #{InboundHttpLogger::Test.logs_count}"
 ```
+
+## Future Enhancements
+
+- Performance monitoring and metrics
+- Log rotation and archival strategies
+- Look into writing to SQLite on disk and using https://litestream.io/ to aggregate the logs 
+- Redis adapter for high-throughput logging
+- MySQL adapter (upon request)
 
 ## License
 

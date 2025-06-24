@@ -1,13 +1,11 @@
 # frozen_string_literal: true
 
-require 'set'
-
 module InboundHttpLogger
   class Configuration
-    attr_accessor :enabled, :debug_logging, :max_body_size, :log_level
-    attr_accessor :secondary_database_url, :secondary_database_adapter
-    attr_reader :excluded_paths, :excluded_content_types, :sensitive_headers, :sensitive_body_keys
-    attr_reader :excluded_controllers, :excluded_actions
+    attr_accessor :enabled, :debug_logging, :max_body_size, :log_level, :secondary_database_url,
+                  :secondary_database_adapter
+    attr_reader :excluded_paths, :excluded_content_types, :sensitive_headers, :sensitive_body_keys,
+                :excluded_controllers, :excluded_actions
 
     def initialize
       @enabled = false
@@ -28,19 +26,19 @@ module InboundHttpLogger
                                   %r{^/favicon\.ico$},
                                   %r{^/robots\.txt$},
                                   %r{^/sitemap\.xml$},
-                                  %r{\.css$},
-                                  %r{\.js$},
-                                  %r{\.map$},
-                                  %r{\.ico$},
-                                  %r{\.png$},
-                                  %r{\.jpg$},
-                                  %r{\.jpeg$},
-                                  %r{\.gif$},
-                                  %r{\.svg$},
-                                  %r{\.woff$},
-                                  %r{\.woff2$},
-                                  %r{\.ttf$},
-                                  %r{\.eot$}
+                                  /\.css$/,
+                                  /\.js$/,
+                                  /\.map$/,
+                                  /\.ico$/,
+                                  /\.png$/,
+                                  /\.jpg$/,
+                                  /\.jpeg$/,
+                                  /\.gif$/,
+                                  /\.svg$/,
+                                  /\.woff$/,
+                                  /\.woff2$/,
+                                  /\.ttf$/,
+                                  /\.eot$/
                                 ])
 
       # Default exclusions for content types
@@ -67,33 +65,33 @@ module InboundHttpLogger
                                         ])
 
       # Default sensitive headers to filter
-      @sensitive_headers = Set.new([
-                                     'authorization',
-                                     'cookie',
-                                     'set-cookie',
-                                     'x-api-key',
-                                     'x-auth-token',
-                                     'x-access-token',
-                                     'bearer',
-                                     'x-csrf-token',
-                                     'x-session-id'
+      @sensitive_headers = Set.new(%w[
+                                     authorization
+                                     cookie
+                                     set-cookie
+                                     x-api-key
+                                     x-auth-token
+                                     x-access-token
+                                     bearer
+                                     x-csrf-token
+                                     x-session-id
                                    ])
 
       # Default sensitive body keys to filter
-      @sensitive_body_keys = Set.new([
-                                       'password',
-                                       'secret',
-                                       'token',
-                                       'key',
-                                       'auth',
-                                       'credential',
-                                       'private',
-                                       'ssn',
-                                       'social_security_number',
-                                       'credit_card',
-                                       'card_number',
-                                       'cvv',
-                                       'pin'
+      @sensitive_body_keys = Set.new(%w[
+                                       password
+                                       secret
+                                       token
+                                       key
+                                       auth
+                                       credential
+                                       private
+                                       ssn
+                                       social_security_number
+                                       credit_card
+                                       card_number
+                                       cvv
+                                       pin
                                      ])
 
       # Controller/action exclusions

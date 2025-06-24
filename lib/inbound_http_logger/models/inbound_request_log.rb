@@ -29,17 +29,17 @@ module InboundHttpLogger
       # JSONB-specific scopes for PostgreSQL
       scope :with_response_containing, lambda { |key, value|
         if using_jsonb?
-          where("response_body @> ?", { key => value }.to_json)
+          where('response_body @> ?', { key => value }.to_json)
         else
-          where("JSON_EXTRACT(response_body, ?) = ?", "$.#{key}", value.to_s)
+          where('JSON_EXTRACT(response_body, ?) = ?', "$.#{key}", value.to_s)
         end
       }
 
       scope :with_request_containing, lambda { |key, value|
         if using_jsonb?
-          where("request_body @> ?", { key => value }.to_json)
+          where('request_body @> ?', { key => value }.to_json)
         else
-          where("JSON_EXTRACT(request_body, ?) = ?", "$.#{key}", value.to_s)
+          where('JSON_EXTRACT(request_body, ?) = ?', "$.#{key}", value.to_s)
         end
       }
 
@@ -103,7 +103,7 @@ module InboundHttpLogger
               loggable: loggable,
               metadata: metadata
             )
-          rescue => e
+          rescue StandardError => e
             InboundHttpLogger.configuration.logger.error("Error logging inbound request: #{e.class}: #{e.message}")
             nil
           end
@@ -116,18 +116,18 @@ module InboundHttpLogger
           # General search
           if params[:q].present?
             q = "%#{params[:q].downcase}%"
-            if using_jsonb?
-              # Use JSONB operators for better performance
-              scope = scope.where(
-                'LOWER(url) LIKE ? OR request_body::text ILIKE ? OR response_body::text ILIKE ?',
-                q, "%#{params[:q]}%", "%#{params[:q]}%"
-              )
-            else
-              scope = scope.where(
-                'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
-                q, q, q
-              )
-            end
+            scope = if using_jsonb?
+                      # Use JSONB operators for better performance
+                      scope.where(
+                        'LOWER(url) LIKE ? OR request_body::text ILIKE ? OR response_body::text ILIKE ?',
+                        q, "%#{params[:q]}%", "%#{params[:q]}%"
+                      )
+                    else
+                      scope.where(
+                        'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
+                        q, q, q
+                      )
+                    end
           end
 
           # Filter by status
@@ -143,9 +143,7 @@ module InboundHttpLogger
           end
 
           # Filter by IP address
-          if params[:ip_address].present?
-            scope = scope.where(ip_address: params[:ip_address])
-          end
+          scope = scope.where(ip_address: params[:ip_address]) if params[:ip_address].present?
 
           # Filter by loggable
           if params[:loggable_id].present? && params[:loggable_type].present?
@@ -157,12 +155,20 @@ module InboundHttpLogger
 
           # Filter by date range
           if params[:start_date].present?
-            start_date = Time.zone.parse(params[:start_date]).beginning_of_day rescue nil
+            start_date = begin
+              Time.zone.parse(params[:start_date]).beginning_of_day
+            rescue StandardError
+              nil
+            end
             scope = scope.where('created_at >= ?', start_date) if start_date
           end
 
           if params[:end_date].present?
-            end_date = Time.zone.parse(params[:end_date]).end_of_day rescue nil
+            end_date = begin
+              Time.zone.parse(params[:end_date]).end_of_day
+            rescue StandardError
+              nil
+            end
             scope = scope.where('created_at <= ?', end_date) if end_date
           end
 
@@ -206,7 +212,7 @@ module InboundHttpLogger
             headers = {}
             request.env.each do |key, value|
               if key.start_with?('HTTP_')
-                header_name = key[5..-1].split('_').map(&:capitalize).join('-')
+                header_name = key[5..].split('_').map(&:capitalize).join('-')
                 headers[header_name] = value
               elsif %w[CONTENT_TYPE CONTENT_LENGTH].include?(key)
                 header_name = key.split('_').map(&:capitalize).join('-')

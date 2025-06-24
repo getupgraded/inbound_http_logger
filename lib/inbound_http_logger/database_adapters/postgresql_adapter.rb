@@ -11,7 +11,7 @@ module InboundHttpLogger
           require 'pg'
           true
         rescue LoadError
-          InboundHttpLogger.configuration.logger.warn("pg gem not available. PostgreSQL logging disabled.") if @database_url.present?
+          InboundHttpLogger.configuration.logger.warn('pg gem not available. PostgreSQL logging disabled.') if @database_url.present?
           false
         end
       end
@@ -56,7 +56,7 @@ module InboundHttpLogger
         end
 
         def create_model_class
-          adapter_name = self.connection_name
+          adapter_name = connection_name
 
           Class.new(InboundHttpLogger::Models::BaseRequestLog) do
             self.table_name = 'inbound_request_logs'
@@ -66,7 +66,8 @@ module InboundHttpLogger
 
             class << self
               def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
-                log_data = build_log_data(request, request_body, status, headers, response_body, duration_seconds, options)
+                log_data = build_log_data(request, request_body, status, headers, response_body, duration_seconds,
+                                          options)
                 return nil unless log_data
 
                 # For PostgreSQL, we can store JSON objects directly in JSONB columns
@@ -85,11 +86,11 @@ module InboundHttpLogger
 
               # PostgreSQL JSONB-specific scopes
               def with_response_containing(key, value)
-                where("response_body @> ?", { key => value }.to_json)
+                where('response_body @> ?', { key => value }.to_json)
               end
 
               def with_request_containing(key, value)
-                where("request_body @> ?", { key => value }.to_json)
+                where('request_body @> ?', { key => value }.to_json)
               end
 
               private
@@ -140,20 +141,20 @@ module InboundHttpLogger
 
         def create_indexes_sql
           [
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_request_id ON inbound_request_logs(request_id)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_http_method ON inbound_request_logs(http_method)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_status_code ON inbound_request_logs(status_code)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_created_at ON inbound_request_logs(created_at)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_ip_address ON inbound_request_logs(ip_address)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_duration_ms ON inbound_request_logs(duration_ms)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_loggable ON inbound_request_logs(loggable_type, loggable_id)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_failed_requests ON inbound_request_logs(status_code) WHERE status_code >= 400",
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_request_id ON inbound_request_logs(request_id)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_http_method ON inbound_request_logs(http_method)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_status_code ON inbound_request_logs(status_code)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_created_at ON inbound_request_logs(created_at)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_ip_address ON inbound_request_logs(ip_address)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_duration_ms ON inbound_request_logs(duration_ms)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_loggable ON inbound_request_logs(loggable_type, loggable_id)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_failed_requests ON inbound_request_logs(status_code) WHERE status_code >= 400',
             # JSONB GIN indexes for fast JSON queries
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_request_headers_gin ON inbound_request_logs USING GIN (request_headers)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_request_body_gin ON inbound_request_logs USING GIN (request_body)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_response_headers_gin ON inbound_request_logs USING GIN (response_headers)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_response_body_gin ON inbound_request_logs USING GIN (response_body)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_metadata_gin ON inbound_request_logs USING GIN (metadata)"
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_request_headers_gin ON inbound_request_logs USING GIN (request_headers)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_request_body_gin ON inbound_request_logs USING GIN (request_body)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_response_headers_gin ON inbound_request_logs USING GIN (response_headers)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_response_body_gin ON inbound_request_logs USING GIN (response_body)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_metadata_gin ON inbound_request_logs USING GIN (metadata)'
           ]
         end
     end

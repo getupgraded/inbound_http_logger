@@ -7,7 +7,7 @@ module InboundHttpLogger
       # Configure test logging with a separate database
       def configure(database_url: nil, adapter: :sqlite)
         @test_adapter = create_adapter(database_url, adapter)
-        @test_adapter.establish_connection if @test_adapter
+        @test_adapter&.establish_connection
       end
 
       # Enable test logging
@@ -36,36 +36,42 @@ module InboundHttpLogger
       # Count all logged requests
       def logs_count
         return 0 unless enabled?
+
         @test_adapter.count_logs
       end
 
       # Count logs with specific status
       def logs_with_status(status)
         return 0 unless enabled?
+
         @test_adapter.count_logs_with_status(status)
       end
 
       # Count logs for specific path
       def logs_for_path(path)
         return 0 unless enabled?
+
         @test_adapter.count_logs_for_path(path)
       end
 
       # Get all logs
       def all_logs
         return [] unless enabled?
+
         @test_adapter.all_logs
       end
 
       # Get all logs as simple calls
       def all_calls
         return [] unless enabled?
+
         all_logs.map(&:formatted_call)
       end
 
       # Clear all test logs
       def clear_logs!
         return unless enabled?
+
         @test_adapter.clear_logs
       end
 
@@ -75,21 +81,13 @@ module InboundHttpLogger
 
         scope = @test_adapter.model_class.all
 
-        if criteria[:status]
-          scope = scope.where(status_code: criteria[:status])
-        end
+        scope = scope.where(status_code: criteria[:status]) if criteria[:status]
 
-        if criteria[:method]
-          scope = scope.where(http_method: criteria[:method].to_s.upcase)
-        end
+        scope = scope.where(http_method: criteria[:method].to_s.upcase) if criteria[:method]
 
-        if criteria[:path]
-          scope = scope.where("url LIKE ?", "%#{criteria[:path]}%")
-        end
+        scope = scope.where('url LIKE ?', "%#{criteria[:path]}%") if criteria[:path]
 
-        if criteria[:ip_address]
-          scope = scope.where(ip_address: criteria[:ip_address])
-        end
+        scope = scope.where(ip_address: criteria[:ip_address]) if criteria[:ip_address]
 
         scope.order(created_at: :desc)
       end
@@ -181,7 +179,7 @@ module InboundHttpLogger
         elsif defined?(expect) # RSpec
           expect(logs).not_to be_empty, "Expected request to be logged: #{method.upcase} #{path}"
         else
-          raise "No test framework detected"
+          raise 'No test framework detected'
         end
 
         logs.first
@@ -190,17 +188,17 @@ module InboundHttpLogger
       # Assert request count
       def assert_request_count(expected_count, criteria = {})
         actual_count = if criteria.empty?
-                        InboundHttpLogger::Test.logs_count
-                      else
-                        InboundHttpLogger::Test.logs_matching(criteria).count
-                      end
+                         InboundHttpLogger::Test.logs_count
+                       else
+                         InboundHttpLogger::Test.logs_matching(criteria).count
+                       end
 
         if defined?(assert_equal) # Minitest
           assert_equal expected_count, actual_count
         elsif defined?(expect) # RSpec
           expect(actual_count).to eq(expected_count)
         else
-          raise "No test framework detected"
+          raise 'No test framework detected'
         end
       end
 
@@ -214,7 +212,7 @@ module InboundHttpLogger
         elsif defined?(expect) # RSpec
           expect(actual_rate).to be_within(tolerance).of(expected_rate)
         else
-          raise "No test framework detected"
+          raise 'No test framework detected'
         end
       end
     end

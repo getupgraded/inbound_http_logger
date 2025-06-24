@@ -11,7 +11,7 @@ module InboundHttpLogger
           require 'sqlite3'
           true
         rescue LoadError
-          InboundHttpLogger.configuration.logger.warn("SQLite3 gem not available. SQLite logging disabled.") if @database_url.present?
+          InboundHttpLogger.configuration.logger.warn('SQLite3 gem not available. SQLite logging disabled.') if @database_url.present?
           false
         end
       end
@@ -66,15 +66,13 @@ module InboundHttpLogger
         end
 
         def create_model_class
-          adapter_connection_name = self.connection_name
+          adapter_connection_name = connection_name
 
           # Create a named class to avoid "Anonymous class is not allowed" error
           class_name = "SqliteRequestLog#{adapter_connection_name.to_s.camelize}"
 
           # Remove existing class if it exists
-          if InboundHttpLogger::DatabaseAdapters.const_defined?(class_name)
-            InboundHttpLogger::DatabaseAdapters.send(:remove_const, class_name)
-          end
+          InboundHttpLogger::DatabaseAdapters.send(:remove_const, class_name) if InboundHttpLogger::DatabaseAdapters.const_defined?(class_name)
 
           # Create the new class
           klass = Class.new(InboundHttpLogger::Models::BaseRequestLog) do
@@ -82,14 +80,15 @@ module InboundHttpLogger
 
             class << self
               def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
-                log_data = build_log_data(request, request_body, status, headers, response_body, duration_seconds, options)
+                log_data = build_log_data(request, request_body, status, headers, response_body, duration_seconds,
+                                          options)
                 return nil unless log_data
 
                 create!(log_data)
               end
 
               # SQLite-specific text search
-              def apply_text_search(scope, q, original_query)
+              def apply_text_search(scope, q, _original_query)
                 scope.where(
                   'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
                   q, q, q
@@ -98,11 +97,11 @@ module InboundHttpLogger
 
               # SQLite-specific JSON scopes
               def with_response_containing(key, value)
-                where("JSON_EXTRACT(response_body, ?) = ?", "$.#{key}", value.to_s)
+                where('JSON_EXTRACT(response_body, ?) = ?', "$.#{key}", value.to_s)
               end
 
               def with_request_containing(key, value)
-                where("JSON_EXTRACT(request_body, ?) = ?", "$.#{key}", value.to_s)
+                where('JSON_EXTRACT(request_body, ?) = ?', "$.#{key}", value.to_s)
               end
             end
           end
@@ -144,13 +143,13 @@ module InboundHttpLogger
 
         def create_indexes_sql
           [
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_request_id ON inbound_request_logs(request_id)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_http_method ON inbound_request_logs(http_method)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_status_code ON inbound_request_logs(status_code)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_created_at ON inbound_request_logs(created_at)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_ip_address ON inbound_request_logs(ip_address)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_duration_ms ON inbound_request_logs(duration_ms)",
-            "CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_failed_requests ON inbound_request_logs(status_code) WHERE status_code >= 400"
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_request_id ON inbound_request_logs(request_id)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_http_method ON inbound_request_logs(http_method)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_status_code ON inbound_request_logs(status_code)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_created_at ON inbound_request_logs(created_at)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_ip_address ON inbound_request_logs(ip_address)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_duration_ms ON inbound_request_logs(duration_ms)',
+            'CREATE INDEX IF NOT EXISTS idx_inbound_request_logs_failed_requests ON inbound_request_logs(status_code) WHERE status_code >= 400'
           ]
         end
     end

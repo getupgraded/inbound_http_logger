@@ -13,12 +13,12 @@ module InboundHttpLogger
 
       # Establish connection to the secondary database
       def establish_connection
-        raise NotImplementedError, "Subclasses must implement establish_connection"
+        raise NotImplementedError, 'Subclasses must implement establish_connection'
       end
 
       # Get the model class for this adapter
       def model_class
-        raise NotImplementedError, "Subclasses must implement model_class"
+        raise NotImplementedError, 'Subclasses must implement model_class'
       end
 
       # Count logs
@@ -28,7 +28,7 @@ module InboundHttpLogger
         begin
           ensure_connection_and_table
           model_class.count
-        rescue => e
+        rescue StandardError => e
           InboundHttpLogger.configuration.logger.error("Error counting logs in #{adapter_name}: #{e.class}: #{e.message}")
           0
         end
@@ -41,7 +41,7 @@ module InboundHttpLogger
         begin
           ensure_connection_and_table
           model_class.where(status_code: status).count
-        rescue => e
+        rescue StandardError => e
           InboundHttpLogger.configuration.logger.error("Error counting logs with status in #{adapter_name}: #{e.class}: #{e.message}")
           0
         end
@@ -53,8 +53,8 @@ module InboundHttpLogger
 
         begin
           ensure_connection_and_table
-          model_class.where("url LIKE ?", "%#{path}%").count
-        rescue => e
+          model_class.where('url LIKE ?', "%#{path}%").count
+        rescue StandardError => e
           InboundHttpLogger.configuration.logger.error("Error counting logs for path in #{adapter_name}: #{e.class}: #{e.message}")
           0
         end
@@ -67,7 +67,7 @@ module InboundHttpLogger
         begin
           ensure_connection_and_table
           model_class.delete_all
-        rescue => e
+        rescue StandardError => e
           InboundHttpLogger.configuration.logger.error("Error clearing logs in #{adapter_name}: #{e.class}: #{e.message}")
         end
       end
@@ -79,7 +79,7 @@ module InboundHttpLogger
         begin
           ensure_connection_and_table
           model_class.order(created_at: :desc).limit(1000) # Reasonable limit
-        rescue => e
+        rescue StandardError => e
           InboundHttpLogger.configuration.logger.error("Error fetching logs from #{adapter_name}: #{e.class}: #{e.message}")
           []
         end
@@ -95,7 +95,7 @@ module InboundHttpLogger
 
           # Use the model class directly - it will use the correct connection
           model_class.log_request(request, request_body, status, headers, response_body, duration_seconds, options)
-        rescue => e
+        rescue StandardError => e
           InboundHttpLogger.configuration.logger.error("Error logging request in #{adapter_name}: #{e.class}: #{e.message}")
           nil
         end
@@ -128,7 +128,7 @@ module InboundHttpLogger
         def connection_established?
           # For now, assume connection is established if configuration exists
           ActiveRecord::Base.configurations.configurations.any? { |c| c.name == connection_name.to_s }
-        rescue
+        rescue StandardError
           false
         end
 
@@ -145,7 +145,7 @@ module InboundHttpLogger
 
         # Build CREATE TABLE SQL - to be implemented by subclasses
         def build_create_table_sql
-          raise NotImplementedError, "Subclasses must implement build_create_table_sql"
+          raise NotImplementedError, 'Subclasses must implement build_create_table_sql'
         end
 
         # Build index creation SQL - to be implemented by subclasses
