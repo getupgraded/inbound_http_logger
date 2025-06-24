@@ -15,7 +15,7 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = ">= 3.4.0"
 
   # Specify which files should be added to the gem when it is released.
-  spec.files = Dir.glob("{lib,test}/**/*") + %w[README.md Rakefile inbound_http_logger.gemspec]
+  spec.files = Dir.glob("lib/**/*") + %w[README.md CHANGELOG.md LICENSE.txt]
   spec.require_paths = ["lib"]
   spec.extra_rdoc_files = ["LICENSE.txt"]
 
