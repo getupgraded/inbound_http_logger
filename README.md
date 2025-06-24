@@ -161,7 +161,18 @@ InboundHttpLogger.secondary_logging_enabled?
 
 ## Test Utilities
 
-The gem provides a dedicated test namespace with powerful utilities for testing HTTP request logging:
+The gem provides a dedicated test namespace with powerful utilities for testing HTTP request logging.
+
+### Importing Test Utilities
+
+**Important**: Test utilities are not automatically loaded with the main gem. You must explicitly require them in your test environment:
+
+```ruby
+# In your test files or test_helper.rb
+require 'inbound_http_logger/test'
+```
+
+This design keeps production environments lean by only loading test utilities when explicitly needed.
 
 ### Test Configuration
 
@@ -225,6 +236,8 @@ For system tests that make real HTTP requests through a browser, you need to ena
 
 ```ruby
 # test/application_system_test_case.rb
+require 'inbound_http_logger/test'  # Required for test utilities
+
 class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   include InboundHttpLogger::Test::Helpers
 
@@ -260,6 +273,8 @@ end
 
 ```ruby
 # test/test_helper.rb
+require 'inbound_http_logger/test'  # Required for test utilities
+
 class ActiveSupport::TestCase
   include InboundHttpLogger::Test::Helpers
 
@@ -307,6 +322,8 @@ end
 
 ```ruby
 # spec/rails_helper.rb
+require 'inbound_http_logger/test'  # Required for test utilities
+
 RSpec.configure do |config|
   config.include InboundHttpLogger::Test::Helpers
 
@@ -374,6 +391,9 @@ InboundHttpLogger.disable_secondary_logging!
 #### Test Setup
 
 ```ruby
+# First, require the test utilities
+require 'inbound_http_logger/test'
+
 # Configure test logging
 InboundHttpLogger::Test.configure(database_url: 'sqlite3:///tmp/test.sqlite3')
 InboundHttpLogger::Test.enable!

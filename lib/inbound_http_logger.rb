@@ -16,7 +16,6 @@ require_relative "inbound_http_logger/models/base_request_log"
 require_relative "inbound_http_logger/models/inbound_request_log"
 require_relative "inbound_http_logger/middleware/logging_middleware"
 require_relative "inbound_http_logger/concerns/controller_logging"
-require_relative "inbound_http_logger/test"
 require_relative "inbound_http_logger/railtie" if defined?(Rails)
 
 module InboundHttpLogger

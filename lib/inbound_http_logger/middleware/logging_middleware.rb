@@ -163,7 +163,7 @@ module InboundHttpLogger
           end
 
           # Also log to test database if test module is enabled
-          return unless InboundHttpLogger::Test.enabled?
+          return unless defined?(InboundHttpLogger::Test) && InboundHttpLogger::Test.enabled?
 
           InboundHttpLogger::Test.log_request(request, request_body, status, headers, response_body, duration_seconds)
         end
