@@ -35,15 +35,15 @@ module InboundHttpLogger
         # Log the request and response (with error handling)
         begin
           log_request(request, request_body, status, headers, response_body, duration_seconds)
-        rescue => log_error
+        rescue StandardError => e
           # Log the error but don't let it affect the application
-          InboundHttpLogger.configuration.logger.error("Error logging inbound request: #{log_error.class}: #{log_error.message}")
-          InboundHttpLogger.configuration.logger.error(log_error.backtrace.join("\n")) if InboundHttpLogger.configuration.debug_logging
+          InboundHttpLogger.configuration.logger.error("Error logging inbound request: #{e.class}: #{e.message}")
+          InboundHttpLogger.configuration.logger.error(e.backtrace.join("\n")) if InboundHttpLogger.configuration.debug_logging
         end
 
         # Return the response
         [status, headers, response]
-      rescue => e
+      rescue StandardError => e
         # Log the error but don't let it affect the application
         InboundHttpLogger.configuration.logger.error("Error in InboundHttpLogger::LoggingMiddleware: #{e.class}: #{e.message}")
         InboundHttpLogger.configuration.logger.error(e.backtrace.join("\n")) if InboundHttpLogger.configuration.debug_logging
@@ -74,13 +74,13 @@ module InboundHttpLogger
         end
 
         # Check if we should log based on response
-        def should_log_response?(request, status, headers)
+        def should_log_response?(_request, _status, headers)
           content_type = headers['Content-Type']&.split(';')&.first
           InboundHttpLogger.configuration.should_log_content_type?(content_type)
         end
 
         # Check if we should capture response body
-        def should_capture_response_body?(request, status, headers)
+        def should_capture_response_body?(_request, status, headers)
           return false if status == 204 # No Content
           return false if status >= 300 && status < 400 # Redirects typically don't have meaningful bodies
 
@@ -99,7 +99,7 @@ module InboundHttpLogger
           return nil if body.bytesize > InboundHttpLogger.configuration.max_body_size
 
           parse_body(body, request.content_type)
-        rescue => e
+        rescue StandardError => e
           InboundHttpLogger.configuration.logger.error("Error reading request body: #{e.message}")
           body&.first(1000) # Return first 1000 chars if parsing fails
         end
@@ -116,7 +116,7 @@ module InboundHttpLogger
           return nil if body.bytesize > InboundHttpLogger.configuration.max_body_size
 
           body
-        rescue => e
+        rescue StandardError => e
           InboundHttpLogger.configuration.logger.error("Error reading response body: #{e.message}")
           nil
         end
@@ -135,7 +135,7 @@ module InboundHttpLogger
           when 'application/x-www-form-urlencoded'
             begin
               Rack::Utils.parse_nested_query(body)
-            rescue => e
+            rescue StandardError => e
               InboundHttpLogger.configuration.logger.error("Error parsing form data: #{e.message}")
               body
             end

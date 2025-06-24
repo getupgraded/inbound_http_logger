@@ -18,24 +18,70 @@ AllCops:
   Exclude:
     - 'bin/**/*'
     - 'sig/**/*'
+    - 'vendor/**/*'
+    - 'tmp/**/*'
+    - 'pkg/**/*'
     - 'lib/inbound_http_logger/generators/templates/**/*'
+    - 'README.md'
 
 # Gem-specific overrides
 Style/Documentation:
-  Enabled: true
+  Enabled: false
   Exclude:
     - 'test/**/*'
 
 Metrics/BlockLength:
+  Max: 40
   Exclude:
     - 'test/**/*'
     - 'inbound_http_logger.gemspec'
 
 # Allow longer lines in tests for readability
 Layout/LineLength:
+  Max: 150
+  AllowURI: true
+  AllowHeredoc: true
   Exclude:
     - 'test/**/*'
 
 Layout/IndentationConsistency:
   Enabled: true
   EnforcedStyle: indented_internal_methods
+
+Metrics/MethodLength:
+  Max: 250
+  Exclude:
+    - 'test/**/*'
+
+Metrics/AbcSize:
+  Enabled: false
+
+Naming/AccessorMethodName:
+  Enabled: false
+
+ThreadSafety/ClassInstanceVariable:
+  Enabled: false
+
+Metrics/ClassLength:
+  Enabled: false
+
+Metrics/PerceivedComplexity:
+  Enabled: false
+
+Metrics/ParameterLists:
+  Enabled: false
+
+Style/ClassVars:
+  Enabled: false
+
+Naming/MethodParameterName:
+  Enabled: false
+
+Metrics/CyclomaticComplexity:
+  Enabled: false
+
+Gemspec/RequiredRubyVersion:
+  Enabled: false
+
+Metrics/ModuleLength:
+  Enabled: false

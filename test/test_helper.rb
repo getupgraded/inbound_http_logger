@@ -1,17 +1,22 @@
 # frozen_string_literal: true
 
-$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 
-require "minitest/autorun"
-require "minitest/spec"
-require "mocha/minitest"
-require "webmock/minitest"
-require "active_record"
-require "sqlite3"
-require "rails"
-require "action_controller"
+require 'minitest/autorun'
+require 'minitest/spec'
+require 'mocha/minitest'
+require 'webmock/minitest'
+require 'active_record'
+require 'sqlite3'
+require 'rails'
+require 'action_controller'
 
-require "inbound_http_logger"
+# Define a basic ApplicationRecord for models
+class ApplicationRecord < ActiveRecord::Base
+  self.abstract_class = true
+end
+
+require 'inbound_http_logger'
 
 # Set up in-memory SQLite database for testing
 ActiveRecord::Base.establish_connection(
@@ -109,7 +114,7 @@ module TestHelpers
     scope = scope.where(http_method: method.to_s.upcase) if method
     scope = scope.where(url: url) if url
 
-    assert_equal 0, scope.count, "Expected no requests to be logged"
+    assert_equal 0, scope.count, 'Expected no requests to be logged'
   end
 
   def create_rack_request(method: 'GET', path: '/', headers: {}, body: nil)
@@ -117,7 +122,7 @@ module TestHelpers
 
     # Add headers
     headers.each do |key, value|
-      env["HTTP_#{key.upcase.gsub('-', '_')}"] = value
+      env["HTTP_#{key.upcase.tr('-', '_')}"] = value
     end
 
     # Add body and content type
