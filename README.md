@@ -17,6 +17,11 @@ A production-safe gem for comprehensive inbound HTTP request logging in Rails ap
 - **SQLite logging**: Optional separate SQLite database for local logging and testing
 - **Test utilities**: Persistent test logging with request counting and analysis tools
 
+## Requirements
+
+This gem supports Ruby 3.2 or newer and Rails 7.2 or newer. The CI matrix also
+tests against Ruby 3.3 and Rails 8.1 to ensure compatibility.
+
 ## Installation
 
 Add to your Gemfile:
