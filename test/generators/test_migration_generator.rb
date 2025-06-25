@@ -52,6 +52,18 @@ describe InboundHttpLogger::Generators::MigrationGenerator do
   end
 
   it 'generates a migration that runs on PostgreSQL' do
+    skip 'PostgreSQL test database not available' unless postgresql_test_database_available?
     run_migration(adapter: 'postgresql', database: 'inbound_test', username: 'postgres', password: 'postgres', host: 'localhost')
   end
+
+  private
+
+    def postgresql_test_database_available?
+      require 'pg'
+      # Try to connect to the specific test database
+      PG.connect(host: 'localhost', port: 5432, dbname: 'inbound_test', user: 'postgres', password: 'postgres').close
+      true
+    rescue LoadError, PG::Error, StandardError
+      false
+    end
 end
