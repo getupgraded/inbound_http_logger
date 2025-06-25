@@ -21,6 +21,109 @@ lib/inbound_http_logger/
 
 **Rule**: Always place new functionality in the appropriate module. Never mix concerns across modules.
 
+## Technology Stack and Dependencies
+
+### 1. Testing Framework: Minitest
+The gem uses **Minitest** with standard `Test::Unit` syntax (not RSpec or minitest/spec):
+
+```ruby
+class TestDatabaseAdapters < Minitest::Test
+  def setup
+    # Setup code
+  end
+
+  def test_sqlite_adapter_creates_model_class
+    assert_equal expected, actual
+    assert_includes collection, item
+    refute_nil object
+  end
+end
+```
+
+**Key Points**:
+- **Use `assert_equal`, `assert_includes`, `refute_nil`** - Standard Minitest assertions
+- **Do NOT use `_(value).must_equal expected`** - That's minitest/spec syntax
+- **Do NOT use RSpec syntax** - No `expect().to eq()` or `describe/it` blocks
+- **Use `setup` and `teardown` methods** - Not `before` and `after`
+
+**Rule**: Always use standard Minitest Test::Unit syntax. This ensures consistency and avoids confusion between different testing DSLs.
+
+### 2. Database Support
+**Primary**: SQLite3 (for development, testing, and simple deployments)
+**Secondary**: PostgreSQL (for production with advanced features)
+
+```ruby
+# Required gems
+gem 'sqlite3', '~> 1.4'
+gem 'pg', '~> 1.1', optional: true
+```
+
+**Design Philosophy**:
+- **SQLite as default**: Works out of the box, no setup required
+- **PostgreSQL as upgrade path**: JSONB columns, GIN indexes, better performance
+- **Graceful fallback**: PostgreSQL features disabled if `pg` gem not available
+
+**Rule**: Always support both databases. Implement features in SQLite first, then add PostgreSQL optimizations.
+
+### 3. Rails Integration
+**Approach**: Railtie-based integration with optional middleware
+
+```ruby
+# Core dependencies
+gem 'activerecord', '>= 7.0'
+gem 'activesupport', '>= 7.0'
+gem 'railties', '>= 7.0'
+```
+
+**Integration Points**:
+- **Railtie**: Automatic middleware registration and configuration
+- **Generators**: Rails-style migration generators
+- **Concerns**: Controller mixins for manual logging
+- **Middleware**: Rack middleware for automatic request logging
+
+**Rule**: Follow Rails conventions. Use Railties for integration, generators for setup, concerns for controller features.
+
+### 4. Code Quality and CI/CD
+**Linting**: RuboCop with standard Ruby style guide
+**CI/CD**: GitHub Actions with matrix testing
+**Testing**: Multi-version testing (Ruby 3.2+, Rails 7.2+)
+
+```yaml
+# GitHub Actions matrix
+strategy:
+  matrix:
+    ruby-version: ['3.2', '3.3', '3.4']
+    rails-version: ['7.2.0', '8.0.1']
+```
+
+**Quality Gates**:
+- **RuboCop**: Code style and quality checks
+- **Test Coverage**: Comprehensive test suite with multiple databases
+- **Multi-version**: Compatibility testing across Ruby and Rails versions
+
+**Rule**: All code must pass RuboCop checks and comprehensive test suite before merging.
+
+### 5. Key Dependencies and Their Purposes
+
+| Gem | Purpose | Required |
+|-----|---------|----------|
+| `activerecord` | Database ORM and migrations | Yes |
+| `activesupport` | Rails utilities and core extensions | Yes |
+| `railties` | Rails integration and generators | Yes |
+| `sqlite3` | Default database adapter | Yes |
+| `pg` | PostgreSQL adapter for production | Optional |
+| `rack` | HTTP middleware interface | Yes |
+| `minitest` | Testing framework | Development |
+| `rubocop` | Code quality and style checking | Development |
+
+**Dependency Philosophy**:
+- **Minimal required dependencies**: Only essential Rails components
+- **Optional production dependencies**: PostgreSQL support when needed
+- **Development dependencies**: Testing and quality tools
+- **No unnecessary gems**: Avoid dependencies that add complexity
+
+**Rule**: Keep dependencies minimal. Add new dependencies only when they provide significant value and cannot be easily implemented internally.
+
 ### 2. Database Adapter Pattern
 The gem uses a base adapter pattern with database-specific implementations:
 

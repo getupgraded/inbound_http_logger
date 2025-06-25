@@ -1,0 +1,77 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Test script specifically for PostgreSQL functionality
+require 'bundler/setup'
+
+puts "🐘 Testing PostgreSQL functionality..."
+
+# Check if PostgreSQL gem is available
+begin
+  require 'pg'
+  puts "✅ PostgreSQL gem is available"
+rescue LoadError
+  puts "❌ PostgreSQL gem not available"
+  exit 1
+end
+
+# Check if we can connect to the test database
+database_url = ENV['INBOUND_HTTP_LOGGER_TEST_DATABASE_URL'] ||
+               ENV['DATABASE_URL'] ||
+               'postgresql://postgres:postgres@localhost:5432/inbound_http_logger_test'
+
+puts "🔗 Testing connection to: #{database_url}"
+
+begin
+  uri = URI.parse(database_url)
+  conn = PG.connect(
+    host: uri.host,
+    port: uri.port || 5432,
+    dbname: uri.path[1..], # Remove leading slash
+    user: uri.user,
+    password: uri.password
+  )
+
+  # Test basic query
+  result = conn.exec('SELECT version()')
+  puts "✅ Connected to PostgreSQL: #{result.first['version'][0..50]}..."
+
+  conn.close
+  puts "✅ PostgreSQL connection test passed"
+rescue StandardError => e
+  puts "❌ PostgreSQL connection failed: #{e.message}"
+  exit 1
+end
+
+# Test the database adapters
+puts "🧪 Testing database adapters..."
+
+require_relative '../test/test_helper'
+require 'inbound_http_logger/database_adapters/postgresql_adapter'
+
+begin
+  # Test PostgreSQL adapter
+  adapter = InboundHttpLogger::DatabaseAdapters::PostgresqlAdapter.new(database_url, :test_pg)
+  model_class = adapter.send(:create_model_class)
+
+  puts "✅ PostgreSQL adapter model class created"
+  puts "   Ancestors: #{model_class.ancestors.map(&:to_s)[0..2].join(' < ')}"
+  puts "   Has formatted_call: #{model_class.instance_methods.include?(:formatted_call)}"
+
+  # Test instance methods
+  instance = model_class.new(http_method: 'POST', url: '/api/test', status_code: 201)
+  formatted = instance.formatted_call
+  puts "   formatted_call result: #{formatted}"
+
+  if formatted == 'POST /api/test'
+    puts "✅ PostgreSQL adapter test passed"
+  else
+    puts "❌ PostgreSQL adapter test failed: unexpected result"
+    exit 1
+  end
+rescue StandardError => e
+  puts "❌ PostgreSQL adapter test failed: #{e.message}"
+  exit 1
+end
+
+puts "🎉 All PostgreSQL tests passed!"

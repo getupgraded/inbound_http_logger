@@ -163,8 +163,8 @@ module TestHelpers
                                         'action_cable/internal'
                                       ])
 
-    # Clear all logs
-    InboundHttpLogger::Models::InboundRequestLog.delete_all
+    # Clear all logs (only if table exists)
+    InboundHttpLogger::Models::InboundRequestLog.delete_all if ActiveRecord::Base.connection.table_exists?(:inbound_request_logs)
 
     # Clear thread-local data
     InboundHttpLogger.clear_thread_data

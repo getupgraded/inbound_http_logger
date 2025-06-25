@@ -6,10 +6,23 @@ require 'rake/testtask'
 Rake::TestTask.new(:test) do |t|
   t.libs << 'test'
   t.libs << 'lib'
-  # Run middleware tests first, then other tests (exclude test_helper.rb)
-  t.test_files = FileList['test/middleware/test_*.rb', 'test/models/test_*.rb', 'test/concerns/test_*.rb',
-                          'test/test_inbound_http_logger.rb']
+  # Run all test files (exclude test_helper.rb)
+  t.test_files = FileList['test/**/*test*.rb'].exclude('test/test_helper.rb')
   t.verbose    = true
 end
 
-task default: :test
+desc 'Run RuboCop'
+task rubocop: :environment do
+  sh 'bundle exec rubocop --config .rubocop.yml'
+end
+
+desc 'Run all quality checks'
+task quality: %i[rubocop]
+
+desc 'Run tests and quality checks'
+task ci: %i[test quality]
+
+desc 'Dummy environment task for gems'
+task :environment
+
+task default: :ci
