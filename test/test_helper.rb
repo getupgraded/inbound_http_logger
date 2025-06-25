@@ -11,11 +11,6 @@ require 'sqlite3'
 require 'rails'
 require 'action_controller'
 
-# Define a basic ApplicationRecord for models
-class ApplicationRecord < ActiveRecord::Base
-  self.abstract_class = true
-end
-
 require 'inbound_http_logger'
 
 # Set up in-memory SQLite database for testing
@@ -72,14 +67,27 @@ end
 # Test helper methods
 module TestHelpers
   def setup
-    # Clear any existing configuration
-    InboundHttpLogger.instance_variable_set(:@configuration, nil)
+    # Clear thread-local configuration override first
+    InboundHttpLogger.clear_configuration_override
+
+    # Reset global configuration to defaults by creating a fresh one
+    InboundHttpLogger.instance_variable_set(:@global_configuration, InboundHttpLogger::Configuration.new)
+
+    # Configure with test defaults
+    config = InboundHttpLogger.configuration
+    config.enabled = false
+    config.max_body_size = 10_000
+    config.debug_logging = false
 
     # Clear all logs
     InboundHttpLogger::Models::InboundRequestLog.delete_all
 
     # Clear thread-local data
     InboundHttpLogger.clear_thread_data
+
+    # Reset WebMock
+    WebMock.reset!
+    WebMock.disable_net_connect!
   end
 
   def teardown
@@ -95,6 +103,12 @@ module TestHelpers
     yield
   ensure
     InboundHttpLogger.disable!
+  end
+
+  # Thread-safe configuration override for simple attribute changes
+  # This is the recommended method for parallel testing
+  def with_thread_safe_configuration(**overrides, &block)
+    InboundHttpLogger.with_configuration(**overrides, &block)
   end
 
   def assert_request_logged(method, url, status_code = nil)

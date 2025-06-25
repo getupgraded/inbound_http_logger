@@ -12,7 +12,6 @@ end
 
 require_relative 'inbound_http_logger/version'
 require_relative 'inbound_http_logger/configuration'
-require_relative 'inbound_http_logger/models/base_request_log'
 require_relative 'inbound_http_logger/models/inbound_request_log'
 require_relative 'inbound_http_logger/middleware/logging_middleware'
 require_relative 'inbound_http_logger/concerns/controller_logging'

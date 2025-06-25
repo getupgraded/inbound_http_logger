@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'fileutils'
 require_relative 'base_adapter'
 
 module InboundHttpLogger
@@ -35,8 +36,9 @@ module InboundHttpLogger
         }
 
         # Add to Rails configurations (but don't establish as primary connection)
+        env_name = defined?(Rails) ? Rails.env : 'test'
         ActiveRecord::Base.configurations.configurations << ActiveRecord::DatabaseConfigurations::HashConfig.new(
-          Rails.env,
+          env_name,
           connection_name.to_s,
           config
         )
@@ -74,14 +76,23 @@ module InboundHttpLogger
           # Remove existing class if it exists
           InboundHttpLogger::DatabaseAdapters.send(:remove_const, class_name) if InboundHttpLogger::DatabaseAdapters.const_defined?(class_name)
 
-          # Create the new class
-          klass = Class.new(InboundHttpLogger::Models::BaseRequestLog) do
+          # Create the new class that inherits from the main model
+          klass = Class.new(InboundHttpLogger::Models::InboundRequestLog) do
             self.table_name = 'inbound_request_logs'
+
+            # Store the connection name for use in connection method
+            @adapter_connection_name = adapter_connection_name
+
+            # Override connection to use the secondary database
+            def self.connection
+              ActiveRecord::Base.connection_handler.retrieve_connection(@adapter_connection_name.to_s)
+            end
 
             class << self
               def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
-                log_data = build_log_data(request, request_body, status, headers, response_body, duration_seconds,
-                                          options)
+                log_data = InboundHttpLogger::Models::InboundRequestLog.build_log_data(
+                  request, request_body, status, headers, response_body, duration_seconds, options
+                )
                 return nil unless log_data
 
                 create!(log_data)
@@ -108,9 +119,6 @@ module InboundHttpLogger
 
           # Assign the class to a constant to give it a name
           InboundHttpLogger::DatabaseAdapters.const_set(class_name, klass)
-
-          # Establish connection to the specific database
-          klass.establish_connection(adapter_connection_name)
 
           klass
         end

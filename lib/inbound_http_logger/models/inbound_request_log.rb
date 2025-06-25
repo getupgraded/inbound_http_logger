@@ -109,6 +109,55 @@ module InboundHttpLogger
           end
         end
 
+        # Shared logging logic for database adapters
+        def build_log_data(request, request_body, status, headers, response_body, duration_seconds, options = {})
+          return nil unless request&.path
+          return nil unless InboundHttpLogger.configuration.should_log_path?(request.path)
+
+          # Calculate duration in milliseconds
+          duration_ms = (duration_seconds * 1000).round(2)
+
+          # Get metadata and loggable from thread-local or options
+          metadata = Thread.current[:inbound_http_logger_metadata] || options[:metadata] || {}
+          loggable = Thread.current[:inbound_http_logger_loggable] || options[:loggable]
+
+          # Add controller/action to metadata if available
+          if request.env['action_controller.instance']
+            controller = request.env['action_controller.instance']
+            metadata = metadata.merge(
+              controller: controller.controller_name,
+              action: controller.action_name
+            )
+          end
+
+          # Filter sensitive data
+          filtered_request_headers = InboundHttpLogger.configuration.filter_headers(extract_request_headers(request))
+          filtered_response_headers = InboundHttpLogger.configuration.filter_headers(headers)
+          filtered_request_body = filter_body_for_storage(request_body)
+          filtered_response_body = filter_body_for_storage(response_body)
+
+          {
+            request_id: request.env['action_dispatch.request_id'] || SecureRandom.uuid,
+            http_method: request.request_method,
+            url: request.fullpath,
+            ip_address: request.ip,
+            user_agent: request.user_agent || request.env['HTTP_USER_AGENT'],
+            referrer: request.referer || request.env['HTTP_REFERER'],
+            request_headers: filtered_request_headers,
+            request_body: filtered_request_body,
+            status_code: status,
+            response_headers: filtered_response_headers,
+            response_body: filtered_response_body,
+            duration_seconds: duration_seconds,
+            duration_ms: duration_ms,
+            loggable_type: loggable&.class&.name,
+            loggable_id: loggable&.id,
+            metadata: metadata,
+            created_at: Time.current.utc,
+            updated_at: Time.current.utc
+          }
+        end
+
         # Search logs by various criteria
         def search(params = {})
           scope = all
@@ -116,18 +165,7 @@ module InboundHttpLogger
           # General search
           if params[:q].present?
             q = "%#{params[:q].downcase}%"
-            scope = if using_jsonb?
-                      # Use JSONB operators for better performance
-                      scope.where(
-                        'LOWER(url) LIKE ? OR request_body::text ILIKE ? OR response_body::text ILIKE ?',
-                        q, "%#{params[:q]}%", "%#{params[:q]}%"
-                      )
-                    else
-                      scope.where(
-                        'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
-                        q, q, q
-                      )
-                    end
+            scope = apply_text_search(scope, q, params[:q])
           end
 
           # Filter by status
@@ -182,6 +220,23 @@ module InboundHttpLogger
 
         private
 
+          # Database-specific text search - JSONB-optimized for PostgreSQL
+          def apply_text_search(scope, q, original_query)
+            if using_jsonb?
+              # Use JSONB operators for better performance
+              scope.where(
+                'LOWER(url) LIKE ? OR request_body::text ILIKE ? OR response_body::text ILIKE ?',
+                q, "%#{original_query}%", "%#{original_query}%"
+              )
+            else
+              # Default implementation for other databases
+              scope.where(
+                'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
+                q, q, q
+              )
+            end
+          end
+
           # Filter body for storage, handling JSONB vs JSON columns differently
           def filter_body_for_storage(body)
             return body unless body.is_a?(String) && body.present?
@@ -224,6 +279,11 @@ module InboundHttpLogger
       end
 
       # Instance methods
+
+      # Get a formatted string of the request method and URL
+      def formatted_call
+        "#{http_method} #{url}"
+      end
 
       # Get a formatted string of the request
       def formatted_request
