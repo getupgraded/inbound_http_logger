@@ -3,7 +3,7 @@
 module InboundHttpLogger
   class Configuration
     attr_accessor :enabled, :debug_logging, :max_body_size, :log_level, :secondary_database_url,
-                  :secondary_database_adapter
+                  :secondary_database_adapter, :logger_factory, :cache_adapter
     attr_reader :excluded_paths, :excluded_content_types, :sensitive_headers, :sensitive_body_keys,
                 :excluded_controllers, :excluded_actions
 
@@ -12,6 +12,10 @@ module InboundHttpLogger
       @debug_logging = false
       @max_body_size = 10_000 # 10KB default
       @log_level = :info
+
+      # Dependency injection for Rails integration
+      @logger_factory = nil
+      @cache_adapter = nil
 
       # Secondary database configuration
       @secondary_database_url = nil
@@ -148,6 +152,12 @@ module InboundHttpLogger
     end
 
     # Filter sensitive headers
+    #
+    # NOTE: Filter methods are placed on the Configuration class (rather than a separate
+    # service object) because the filtering logic is entirely driven by configuration data
+    # (sensitive_headers, sensitive_body_keys, max_body_size). This encapsulates both the
+    # filtering rules and their application in one place, ensuring thread-safe access to
+    # configuration overrides and providing a clean API without additional objects.
     def filter_headers(headers)
       return {} unless headers.is_a?(Hash)
 
@@ -163,7 +173,7 @@ module InboundHttpLogger
       filtered
     end
 
-    # Filter sensitive body data
+    # Filter sensitive body data (for JSON columns - re-serializes filtered data)
     def filter_body(body)
       return body unless body.is_a?(String) && body.present?
       return body if body.bytesize > @max_body_size
@@ -179,19 +189,24 @@ module InboundHttpLogger
       end
     end
 
-    # Expose filter_sensitive_data for use by models
+    # Filter sensitive data from parsed objects (for JSONB columns - returns filtered object)
+    # Exposed for use by models that need to filter already-parsed data
     def filter_sensitive_data(data)
       filter_sensitive_data_internal(data)
     end
 
-    # Get the logger instance
+    # Get the logger instance (with dependency injection support)
     def logger
-      @logger ||= if defined?(Rails) && Rails.respond_to?(:logger) && Rails.logger
-                    Rails.logger
-                  else
-                    require 'logger'
-                    Logger.new($stdout)
-                  end
+      if @logger_factory
+        @logger_factory.call
+      else
+        @logger ||= if defined?(Rails) && Rails.respond_to?(:logger) && Rails.logger
+                      Rails.logger
+                    else
+                      require 'logger'
+                      Logger.new($stdout)
+                    end
+      end
     end
 
     # Check if secondary database logging is enabled
@@ -211,6 +226,48 @@ module InboundHttpLogger
       @secondary_database_url = url
       @secondary_database_adapter = adapter
       @secondary_database_adapter_instance = nil # Reset cached adapter
+    end
+
+    # Create a backup of the current configuration state
+    def backup
+      {
+        enabled: @enabled,
+        debug_logging: @debug_logging,
+        max_body_size: @max_body_size,
+        log_level: @log_level,
+        secondary_database_url: @secondary_database_url,
+        secondary_database_adapter: @secondary_database_adapter,
+        logger_factory: @logger_factory,
+        cache_adapter: @cache_adapter,
+        excluded_paths: @excluded_paths.dup,
+        excluded_content_types: @excluded_content_types.dup,
+        sensitive_headers: @sensitive_headers.dup,
+        sensitive_body_keys: @sensitive_body_keys.dup,
+        excluded_controllers: @excluded_controllers.dup,
+        excluded_actions: @excluded_actions.dup
+      }
+    end
+
+    # Restore configuration from a backup
+    def restore(backup)
+      @enabled = backup[:enabled]
+      @debug_logging = backup[:debug_logging]
+      @max_body_size = backup[:max_body_size]
+      @log_level = backup[:log_level]
+      @secondary_database_url = backup[:secondary_database_url]
+      @secondary_database_adapter = backup[:secondary_database_adapter]
+      @logger_factory = backup[:logger_factory]
+      @cache_adapter = backup[:cache_adapter]
+      @excluded_paths = backup[:excluded_paths]
+      @excluded_content_types = backup[:excluded_content_types]
+      @sensitive_headers = backup[:sensitive_headers]
+      @sensitive_body_keys = backup[:sensitive_body_keys]
+      @excluded_controllers = backup[:excluded_controllers]
+      @excluded_actions = backup[:excluded_actions]
+
+      # Reset cached instances
+      @logger = nil
+      @secondary_database_adapter_instance = nil
     end
 
     private

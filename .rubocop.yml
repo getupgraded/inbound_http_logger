@@ -23,6 +23,7 @@ AllCops:
     - 'pkg/**/*'
     - 'lib/inbound_http_logger/generators/templates/**/*'
     - 'README.md'
+    - 'AGENTS.md'
 
 # Gem-specific overrides
 Rails/ApplicationRecord:

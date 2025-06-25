@@ -10,6 +10,7 @@ require 'active_record'
 require 'sqlite3'
 require 'rails'
 require 'action_controller'
+require 'rack/mock'
 
 require 'inbound_http_logger'
 
@@ -64,20 +65,103 @@ end
 
 # JSON columns are automatically handled in Rails 8.0+
 
-# Test helper methods
+# Test helper methods for gem internal tests
 module TestHelpers
   def setup
-    # Clear thread-local configuration override first
-    InboundHttpLogger.clear_configuration_override
-
-    # Reset global configuration to defaults by creating a fresh one
-    InboundHttpLogger.instance_variable_set(:@global_configuration, InboundHttpLogger::Configuration.new)
-
-    # Configure with test defaults
+    # Reset configuration to defaults but don't nil it
     config = InboundHttpLogger.configuration
     config.enabled = false
-    config.max_body_size = 10_000
     config.debug_logging = false
+    config.max_body_size = 10_000
+
+    # Reset excluded paths to defaults (these are Sets, so we need to clear and add)
+    config.excluded_paths.clear
+    config.excluded_paths.merge([
+                                  %r{^/assets/},
+                                  %r{^/packs/},
+                                  %r{^/health$},
+                                  %r{^/ping$},
+                                  %r{^/favicon\.ico$},
+                                  %r{^/robots\.txt$},
+                                  %r{^/sitemap\.xml$},
+                                  /\.css$/,
+                                  /\.js$/,
+                                  /\.map$/,
+                                  /\.ico$/,
+                                  /\.png$/,
+                                  /\.jpg$/,
+                                  /\.jpeg$/,
+                                  /\.gif$/,
+                                  /\.svg$/,
+                                  /\.woff$/,
+                                  /\.woff2$/,
+                                  /\.ttf$/,
+                                  /\.eot$/
+                                ])
+
+    # Reset excluded content types to defaults
+    config.excluded_content_types.clear
+    config.excluded_content_types.merge([
+                                          'text/html',
+                                          'text/css',
+                                          'text/javascript',
+                                          'application/javascript',
+                                          'application/x-javascript',
+                                          'image/png',
+                                          'image/jpeg',
+                                          'image/gif',
+                                          'image/svg+xml',
+                                          'image/webp',
+                                          'image/x-icon',
+                                          'video/mp4',
+                                          'video/webm',
+                                          'audio/mpeg',
+                                          'audio/wav',
+                                          'font/woff',
+                                          'font/woff2',
+                                          'application/font-woff',
+                                          'application/font-woff2'
+                                        ])
+
+    # Reset sensitive headers to defaults
+    config.sensitive_headers.clear
+    config.sensitive_headers.merge(%w[
+                                     authorization
+                                     cookie
+                                     set-cookie
+                                     x-api-key
+                                     x-auth-token
+                                     x-access-token
+                                     bearer
+                                     x-csrf-token
+                                     x-session-id
+                                   ])
+
+    # Reset sensitive body keys to defaults
+    config.sensitive_body_keys.clear
+    config.sensitive_body_keys.merge(%w[
+                                       password
+                                       secret
+                                       token
+                                       key
+                                       auth
+                                       credential
+                                       private
+                                       ssn
+                                       social_security_number
+                                       credit_card
+                                       card_number
+                                       cvv
+                                       pin
+                                     ])
+
+    # Reset excluded controllers to defaults
+    config.excluded_controllers.clear
+    config.excluded_controllers.merge([
+                                        'rails/health',
+                                        'rails/info',
+                                        'action_cable/internal'
+                                      ])
 
     # Clear all logs
     InboundHttpLogger::Models::InboundRequestLog.delete_all
@@ -119,7 +203,7 @@ module TestHelpers
 
     logs = logs.where(status_code: status_code) if status_code
 
-    assert logs.exists?, "Expected request to be logged: #{method.upcase} #{url}"
+    assert_predicate logs, :exists?, "Expected request to be logged: #{method.upcase} #{url}"
     logs.first
   end
 

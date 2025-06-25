@@ -21,14 +21,40 @@ module InboundHttpLogger
   class Error < StandardError; end
 
   class << self
-    # Global configuration instance
+    # Configuration instance (checks for thread-local override first)
     def configuration
-      @configuration ||= Configuration.new
+      Thread.current[:inbound_http_logger_config_override] || global_configuration
+    end
+
+    # Global configuration instance
+    def global_configuration
+      @global_configuration ||= Configuration.new
     end
 
     # Configure the gem with a block
     def configure
       yield(configuration) if block_given?
+    end
+
+    # Thread-safe temporary configuration override for testing
+    def with_configuration(**overrides)
+      return yield if overrides.empty?
+
+      # Create a copy of the current configuration (which may already be an override)
+      current_config = configuration
+      backup = current_config.backup
+      temp_config = Configuration.new
+      temp_config.restore(backup)
+
+      # Apply overrides
+      overrides.each { |key, value| temp_config.public_send("#{key}=", value) }
+
+      # Set thread-local override
+      previous_override = Thread.current[:inbound_http_logger_config_override]
+      Thread.current[:inbound_http_logger_config_override] = temp_config
+      yield
+    ensure
+      Thread.current[:inbound_http_logger_config_override] = previous_override
     end
 
     # Enable logging (can be called without a block)
@@ -83,6 +109,24 @@ module InboundHttpLogger
     # Check if secondary database logging is enabled
     def secondary_logging_enabled?
       configuration.secondary_database_enabled?
+    end
+
+    # Reset configuration to defaults (useful for testing)
+    # WARNING: This will lose all customizations from initializers
+    def reset_configuration!
+      @configuration = nil
+      # Also clear any thread-local overrides
+      Thread.current[:inbound_http_logger_config_override] = nil
+    end
+
+    # Create a new configuration instance with defaults
+    def create_fresh_configuration
+      Configuration.new
+    end
+
+    # Clear thread-local configuration override
+    def clear_configuration_override
+      Thread.current[:inbound_http_logger_config_override] = nil
     end
 
     private
