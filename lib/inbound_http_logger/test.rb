@@ -167,6 +167,90 @@ module InboundHttpLogger
         InboundHttpLogger::Test.disable!
       end
 
+      # Backup current configuration state
+      def backup_inbound_http_logger_configuration
+        InboundHttpLogger.global_configuration.backup
+      end
+
+      # Restore configuration from backup
+      def restore_inbound_http_logger_configuration(backup)
+        InboundHttpLogger.global_configuration.restore(backup)
+      end
+
+      # Execute a block with modified configuration, then restore original
+      def with_inbound_http_logger_configuration(**options)
+        backup = backup_inbound_http_logger_configuration
+
+        InboundHttpLogger.configure do |config|
+          options.each do |key, value|
+            case key
+            when :enabled
+              config.enabled = value
+            when :debug_logging
+              config.debug_logging = value
+            when :max_body_size
+              config.max_body_size = value
+            when :clear_excluded_paths
+              config.excluded_paths.clear if value
+            when :clear_excluded_content_types
+              config.excluded_content_types.clear if value
+            when :excluded_paths
+              Array(value).each { |path| config.excluded_paths << path }
+            when :excluded_content_types
+              Array(value).each { |type| config.excluded_content_types << type }
+            end
+          end
+        end
+
+        yield
+      ensure
+        restore_inbound_http_logger_configuration(backup)
+      end
+
+      # Setup test with isolated configuration (recommended for most tests)
+      def setup_inbound_http_logger_test_with_isolation(database_url: nil, adapter: :sqlite, **config_options)
+        # Backup original configuration
+        @inbound_http_logger_config_backup = backup_inbound_http_logger_configuration
+
+        # Setup test logging
+        setup_inbound_http_logger_test(database_url: database_url, adapter: adapter)
+
+        # Apply configuration options if provided
+        return if config_options.empty?
+
+        InboundHttpLogger.configure do |config|
+          config_options.each do |key, value|
+            case key
+            when :enabled
+              config.enabled = value
+            when :debug_logging
+              config.debug_logging = value
+            when :max_body_size
+              config.max_body_size = value
+            when :clear_excluded_paths
+              config.excluded_paths.clear if value
+            when :clear_excluded_content_types
+              config.excluded_content_types.clear if value
+            when :excluded_paths
+              Array(value).each { |path| config.excluded_paths << path }
+            when :excluded_content_types
+              Array(value).each { |type| config.excluded_content_types << type }
+            end
+          end
+        end
+      end
+
+      # Teardown test with configuration restoration
+      def teardown_inbound_http_logger_test_with_isolation
+        teardown_inbound_http_logger_test
+
+        # Restore original configuration if backup exists
+        return unless @inbound_http_logger_config_backup
+
+        restore_inbound_http_logger_configuration(@inbound_http_logger_config_backup)
+        @inbound_http_logger_config_backup = nil
+      end
+
       # Assert request was logged
       def assert_request_logged(method, path, status: nil)
         criteria = { method: method, path: path }
@@ -214,6 +298,12 @@ module InboundHttpLogger
         else
           raise 'No test framework detected'
         end
+      end
+
+      # Thread-safe configuration override for simple attribute changes
+      # This is the recommended method for parallel testing
+      def with_thread_safe_configuration(**overrides, &block)
+        InboundHttpLogger.with_configuration(**overrides, &block)
       end
     end
   end

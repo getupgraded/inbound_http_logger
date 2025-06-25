@@ -235,6 +235,93 @@ InboundHttpLogger::Test.reset!
 
 ### Test Framework Integration
 
+#### Important: Configuration Isolation in Tests
+
+**WARNING**: Never modify the global configuration directly in tests without proper restoration, as this can cause test pollution and unpredictable failures in parallel test execution.
+
+#### Recommended Test Setup Patterns
+
+**Option 1: Configuration Isolation (Recommended)**
+```ruby
+describe "My Feature" do
+  include InboundHttpLogger::Test::Helpers
+
+  before do
+    setup_inbound_http_logger_test_with_isolation(
+      database_url: 'sqlite3:///tmp/test_requests.sqlite3',
+      enabled: true,
+      clear_excluded_paths: true,
+      clear_excluded_content_types: true
+    )
+  end
+
+  after do
+    teardown_inbound_http_logger_test_with_isolation
+  end
+end
+```
+
+**Option 2: Manual Backup/Restore**
+```ruby
+describe "My Feature" do
+  include InboundHttpLogger::Test::Helpers
+
+  before do
+    @config_backup = backup_inbound_http_logger_configuration
+    setup_inbound_http_logger_test
+
+    InboundHttpLogger.configure do |config|
+      config.enabled = true
+      config.excluded_paths.clear
+      config.excluded_content_types.clear
+    end
+  end
+
+  after do
+    teardown_inbound_http_logger_test
+    restore_inbound_http_logger_configuration(@config_backup)
+  end
+end
+```
+
+**Option 3: Thread-Safe Configuration (Recommended for Parallel Testing)**
+```ruby
+describe "My Feature" do
+  include InboundHttpLogger::Test::Helpers
+
+  it "logs requests with thread-safe configuration" do
+    # Uses the new simplified thread-safe configuration system
+    with_thread_safe_configuration(enabled: true, debug_logging: true) do
+      # Configuration changes only affect current thread
+      # Safe for parallel test execution
+      get '/some/path'
+      assert_request_logged('GET', '/some/path')
+    end
+    # Configuration automatically restored after block
+  end
+end
+```
+
+**Option 4: Temporary Configuration Changes (Legacy)**
+```ruby
+describe "My Feature" do
+  include InboundHttpLogger::Test::Helpers
+
+  it "logs requests with custom configuration" do
+    with_inbound_http_logger_configuration(
+      enabled: true,
+      clear_excluded_paths: true,
+      clear_excluded_content_types: true
+    ) do
+      # Your test code here
+      get '/some/path'
+      assert_request_logged('GET', '/some/path')
+    end
+    # Configuration automatically restored after block
+  end
+end
+```
+
 #### System Test Setup (Capybara/Playwright)
 
 For system tests that make real HTTP requests through a browser, you need to enable both main logging and test utilities:
@@ -247,15 +334,15 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   include InboundHttpLogger::Test::Helpers
 
   setup do
-    # Enable main database logging (captures middleware requests)
-    InboundHttpLogger.enable!
-
-    # Enable test utilities (for assertions)
-    setup_inbound_http_logger_test(database_url: 'sqlite3:///tmp/system_test_requests.sqlite3')
+    # Use isolated setup to avoid configuration pollution
+    setup_inbound_http_logger_test_with_isolation(
+      database_url: 'sqlite3:///tmp/system_test_requests.sqlite3',
+      enabled: true  # Enable for system tests
+    )
   end
 
   teardown do
-    teardown_inbound_http_logger_test
+    teardown_inbound_http_logger_test_with_isolation
   end
 end
 
@@ -284,13 +371,13 @@ class ActiveSupport::TestCase
   include InboundHttpLogger::Test::Helpers
 
   setup do
-    setup_inbound_http_logger_test(
+    setup_inbound_http_logger_test_with_isolation(
       database_url: 'sqlite3:///tmp/test_requests.sqlite3'
     )
   end
 
   teardown do
-    teardown_inbound_http_logger_test
+    teardown_inbound_http_logger_test_with_isolation
   end
 end
 
@@ -730,7 +817,39 @@ end
 
 ## Thread Safety
 
-The gem is fully thread-safe and uses thread-local variables for request-specific metadata and loggable associations.
+The gem is fully thread-safe and supports parallel testing frameworks. It uses thread-local variables for request-specific metadata and loggable associations, ensuring that concurrent requests and tests don't interfere with each other.
+
+### Parallel Testing Support
+
+For parallel testing frameworks, use the thread-safe configuration override:
+
+```ruby
+# Thread-safe configuration changes for testing
+InboundHttpLogger.with_configuration(enabled: true, debug_logging: true) do
+  # Configuration changes only affect current thread
+  # Other test threads are unaffected
+  # Automatically restored when block exits
+end
+```
+
+### Configuration Backup and Restore
+
+The Configuration class provides built-in backup and restore methods:
+
+```ruby
+# Manual backup and restore for complex scenarios
+backup = InboundHttpLogger.global_configuration.backup
+begin
+  # Make complex configuration changes
+  InboundHttpLogger.configure do |config|
+    config.enabled = true
+    config.excluded_paths.clear
+  end
+  # Perform operations
+ensure
+  InboundHttpLogger.global_configuration.restore(backup)
+end
+```
 
 ## Error Handling
 
@@ -747,6 +866,11 @@ InboundHttpLogger.configuration
 InboundHttpLogger.enable!   # Enable logging to main Rails database
 InboundHttpLogger.disable!  # Disable all logging
 InboundHttpLogger.enabled?  # Check if main database logging is enabled
+
+# Thread-Safe Configuration (for testing)
+InboundHttpLogger.with_configuration(**overrides) { ... }  # Thread-safe temporary config
+InboundHttpLogger.global_configuration                     # Access global config directly
+InboundHttpLogger.reset_configuration!                     # Reset to defaults (testing only)
 
 # Additional Database Logging (optional, in addition to main database)
 InboundHttpLogger.enable_secondary_logging!(url, adapter: :sqlite)
@@ -785,12 +909,76 @@ InboundHttpLogger::Test.reset!
 # Include in test classes
 include InboundHttpLogger::Test::Helpers
 
-# Helper methods
+# Configuration Management
+backup_inbound_http_logger_configuration
+restore_inbound_http_logger_configuration(backup)
+with_inbound_http_logger_configuration(**options) { ... }
+with_thread_safe_configuration(**overrides) { ... }  # Recommended for parallel testing
+
+# Test Setup (Recommended)
+setup_inbound_http_logger_test_with_isolation(database_url:, adapter:, **config_options)
+teardown_inbound_http_logger_test_with_isolation
+
+# Test Setup (Basic)
 setup_inbound_http_logger_test(database_url:, adapter:)
 teardown_inbound_http_logger_test
+
+# Assertions
 assert_request_logged(method, path, status:)
 assert_request_count(expected_count, criteria = {})
 assert_success_rate(expected_rate, tolerance: 0.1)
+```
+
+### Configuration Management Best Practices
+
+#### ❌ DON'T: Modify Global Configuration Directly
+```ruby
+# This causes test pollution!
+before do
+  InboundHttpLogger.configure do |config|
+    config.excluded_paths.clear  # Permanently modifies global state
+    config.excluded_content_types.clear
+  end
+end
+```
+
+#### ✅ DO: Use Configuration Isolation
+```ruby
+# This safely isolates configuration changes
+before do
+  setup_inbound_http_logger_test_with_isolation(
+    clear_excluded_paths: true,
+    clear_excluded_content_types: true
+  )
+end
+
+after do
+  teardown_inbound_http_logger_test_with_isolation
+end
+```
+
+#### ✅ DO: Use Temporary Configuration Changes
+```ruby
+it "logs requests without exclusions" do
+  with_inbound_http_logger_configuration(
+    clear_excluded_paths: true,
+    clear_excluded_content_types: true
+  ) do
+    get '/assets/app.css'
+    assert_request_logged('GET', '/assets/app.css')
+  end
+  # Configuration automatically restored
+end
+```
+
+#### Configuration Reset (Advanced)
+```ruby
+# WARNING: Only use in controlled environments
+# This loses all initializer customizations
+InboundHttpLogger.reset_configuration!
+
+# Create fresh configuration with defaults
+fresh_config = InboundHttpLogger.create_fresh_configuration
 ```
 
 ### Model Methods
