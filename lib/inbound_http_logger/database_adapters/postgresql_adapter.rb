@@ -56,18 +56,31 @@ module InboundHttpLogger
         end
 
         def create_model_class
-          adapter_name = connection_name
+          adapter_connection_name = connection_name
 
-          Class.new(InboundHttpLogger::Models::BaseRequestLog) do
+          # Create a named class to avoid "Anonymous class is not allowed" error
+          class_name = "PostgresqlRequestLog#{adapter_connection_name.to_s.camelize}"
+
+          # Remove existing class if it exists
+          InboundHttpLogger::DatabaseAdapters.send(:remove_const, class_name) if InboundHttpLogger::DatabaseAdapters.const_defined?(class_name)
+
+          # Create the new class that inherits from the main model
+          klass = Class.new(InboundHttpLogger::Models::InboundRequestLog) do
             self.table_name = 'inbound_request_logs'
 
-            # Connect to the specific database
-            connects_to database: { writing: adapter_name }
+            # Store the connection name for use in connection method
+            @adapter_connection_name = adapter_connection_name
+
+            # Override connection to use the secondary database
+            def self.connection
+              ActiveRecord::Base.connection_handler.retrieve_connection(@adapter_connection_name.to_s)
+            end
 
             class << self
               def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
-                log_data = build_log_data(request, request_body, status, headers, response_body, duration_seconds,
-                                          options)
+                log_data = InboundHttpLogger::Models::InboundRequestLog.build_log_data(
+                  request, request_body, status, headers, response_body, duration_seconds, options
+                )
                 return nil unless log_data
 
                 # For PostgreSQL, we can store JSON objects directly in JSONB columns
@@ -111,6 +124,11 @@ module InboundHttpLogger
                 end
             end
           end
+
+          # Assign the class to a constant to give it a name
+          InboundHttpLogger::DatabaseAdapters.const_set(class_name, klass)
+
+          klass
         end
 
         def build_create_table_sql

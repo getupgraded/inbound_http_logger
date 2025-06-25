@@ -25,6 +25,9 @@ AllCops:
     - 'README.md'
 
 # Gem-specific overrides
+Rails/ApplicationRecord:
+  Enabled: false
+
 Style/Documentation:
   Enabled: false
   Exclude:
