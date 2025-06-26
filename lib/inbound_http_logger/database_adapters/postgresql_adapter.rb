@@ -20,6 +20,12 @@ module InboundHttpLogger
       def establish_connection
         return unless adapter_available?
 
+        # If no database_url is provided, use the default connection
+        if @database_url.blank?
+          # Use default connection - no need to establish a separate connection
+          return true
+        end
+
         # Parse the database URL
         config = parse_database_url
 
@@ -57,6 +63,10 @@ module InboundHttpLogger
 
         def create_model_class
           adapter_connection_name = connection_name
+          use_default_connection = @database_url.blank?
+
+          # If using default connection, just return the main model class
+          return InboundHttpLogger::Models::InboundRequestLog if use_default_connection
 
           # Create a named class to avoid "Anonymous class is not allowed" error
           class_name = "PostgresqlRequestLog#{adapter_connection_name.to_s.camelize}"
@@ -73,7 +83,17 @@ module InboundHttpLogger
 
             # Override connection to use the secondary database
             def self.connection
-              ActiveRecord::Base.connection_handler.retrieve_connection(@adapter_connection_name.to_s)
+              if @adapter_connection_name
+                # Use configured named connection - fail explicitly if not available
+                ActiveRecord::Base.connection_handler.retrieve_connection(@adapter_connection_name.to_s)
+              else
+                # Use default connection when explicitly configured to do so
+                ActiveRecord::Base.connection
+              end
+            rescue ActiveRecord::ConnectionNotEstablished => e
+              # Don't fall back silently - log the specific issue and re-raise
+              Rails.logger&.error "InboundHttpLogger: Cannot retrieve connection '#{@adapter_connection_name}': #{e.message}"
+              raise
             end
 
             class << self

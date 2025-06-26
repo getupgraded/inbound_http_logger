@@ -24,9 +24,10 @@ lib/inbound_http_logger/
 ## Technology Stack and Dependencies
 
 ### 1. Testing Framework: Minitest
-The gem uses **Minitest** with standard `Test::Unit` syntax (not RSpec or minitest/spec):
+The gem uses **Minitest** with both standard `Test::Unit` syntax and spec-style syntax:
 
 ```ruby
+# Test::Unit style (for complex test classes)
 class TestDatabaseAdapters < Minitest::Test
   def setup
     # Setup code
@@ -38,15 +39,43 @@ class TestDatabaseAdapters < Minitest::Test
     refute_nil object
   end
 end
+
+# Spec style (for feature-focused tests)
+describe "InboundHttpLogger::Models::InboundRequestLog" do
+  before do
+    # Setup code
+  end
+
+  after do
+    # Cleanup code
+  end
+
+  it "logs successful requests" do
+    _(result).must_equal expected
+    _(collection).must_include item
+    _(object).wont_be_nil
+  end
+end
 ```
 
-**Key Points**:
-- **Use `assert_equal`, `assert_includes`, `refute_nil`** - Standard Minitest assertions
-- **Do NOT use `_(value).must_equal expected`** - That's minitest/spec syntax
-- **Do NOT use RSpec syntax** - No `expect().to eq()` or `describe/it` blocks
-- **Use `setup` and `teardown` methods** - Not `before` and `after`
+**Critical Testing Framework Rules**:
 
-**Rule**: Always use standard Minitest Test::Unit syntax. This ensures consistency and avoids confusion between different testing DSLs.
+1. **Include TestHelpers in both Test and Spec classes**:
+   ```ruby
+   Minitest::Test.include(TestHelpers)
+   Minitest::Spec.include(TestHelpers)  # Essential for spec-style tests
+   ```
+
+2. **Spec-style tests use `before`/`after`, not `setup`/`teardown`**:
+   - Test::Unit style: `setup` and `teardown` methods
+   - Spec style: `before` and `after` blocks
+
+3. **Both styles need proper test isolation**:
+   - Always clean up global state modifications
+   - Use thread-local configuration for parallel testing
+   - Add `after` blocks to spec-style tests that modify global state
+
+**Rule**: Both testing styles are acceptable, but ensure proper test isolation regardless of style. Spec-style tests require explicit `before`/`after` blocks for cleanup since they don't automatically inherit `TestHelpers` methods.
 
 ### 2. Database Support
 **Primary**: SQLite3 (for development, testing, and simple deployments)
@@ -264,6 +293,8 @@ InboundHttpLogger.global_configuration.restore(backup)
 **Rule**: The Configuration class encapsulates backup/restore logic. Use these methods instead of manually copying configuration attributes.
 
 ### 4. Dependency Injection for Rails Integration
+
+### 5. Dependency Injection for Rails Integration
 ```ruby
 # Avoid direct Rails calls by injecting dependencies
 InboundHttpLogger.configure do |config|
@@ -313,9 +344,199 @@ klass.connects_to database: { writing: connection_name }
 
 **Rule**: Leverage Rails' connection pooling and multi-database support. Never manage database connections manually or interfere with the main application's database setup.
 
+### 4. Safe Connection Handling and Failure Modes
+
+The gem must handle database connection issues gracefully without breaking the parent application:
+
+```ruby
+# ✅ Correct - Explicit connection handling with safe failures
+def log_request(...)
+  return unless enabled?
+
+  begin
+    model_class.create!(request_data)
+  rescue ActiveRecord::ConnectionNotEstablished => e
+    # Log error but don't crash the app
+    logger.error "InboundHttpLogger: Database connection failed: #{e.message}"
+    return false
+  rescue StandardError => e
+    # Log unexpected errors but don't crash the app
+    logger.error "InboundHttpLogger: Failed to log request: #{e.message}"
+    return false
+  end
+end
+
+# ✅ Correct - Explicit connection configuration
+def connection
+  if @adapter_connection_name
+    # Use configured named connection - fail explicitly if not available
+    ActiveRecord::Base.connection_handler.retrieve_connection(@adapter_connection_name.to_s)
+  else
+    # Use default connection when explicitly configured to do so
+    ActiveRecord::Base.connection
+  end
+rescue ActiveRecord::ConnectionNotEstablished => e
+  # Don't fall back silently - log the specific issue
+  logger.error "InboundHttpLogger: Cannot retrieve connection '#{@adapter_connection_name}': #{e.message}"
+  raise
+end
+
+# ❌ Wrong - Silent fallbacks mask configuration issues
+def connection
+  ActiveRecord::Base.connection_handler.retrieve_connection(@adapter_connection_name.to_s)
+rescue ActiveRecord::ConnectionNotEstablished
+  # This hides real configuration problems!
+  ActiveRecord::Base.connection
+end
+```
+
+**Critical Connection Handling Rules**:
+
+1. **No Silent Fallbacks**: If configured to use a named connection, use only that connection. Don't fall back to default connection silently.
+
+2. **Explicit Configuration**: Make it clear in configuration whether to use default or named connection.
+
+3. **Safe Startup Failures**: During gem initialization, connection failures can raise errors (but catch them in the gem's initialization code).
+
+4. **Safe Runtime Failures**: During request logging, connection failures should log errors but never crash the parent application.
+
+5. **Clear Error Messages**: Log specific connection names and error details to aid debugging.
+
+6. **Test Explicit Configuration**: In tests, explicitly configure which connection strategy to use rather than relying on fallbacks.
+
+**Rationale**: Silent fallbacks between database connections can mask serious configuration issues in production. If a gem is configured to use a specific database connection, it should use exactly that connection or fail with a clear error message. This makes configuration problems obvious during development and testing rather than causing subtle issues in production.
+
 ## Testing Patterns
 
-### 1. Isolated Test Environment
+### 1. Test Isolation and Debugging Methodology
+
+**Critical Rule**: When tests pass individually but fail when run together, always reproduce the issue in the failing context and use systematic debugging to find the root cause before making any fixes.
+
+#### Debugging Test Interference
+
+Test interference occurs when one test modifies global state that affects subsequent tests. Common symptoms:
+- Tests pass individually: `bundle exec ruby test/specific_test.rb`
+- Tests fail in suite: `bundle exec rake test`
+- Failures are intermittent (depend on test execution order)
+
+**Systematic Debugging Process**:
+
+1. **Reproduce the Issue**: Always run tests in the failing context (full suite) to reproduce the problem
+2. **Add Debug Logging**: Insert debug output to trace state changes during test execution
+3. **Validate Assumptions**: Don't assume setup/teardown methods are running - verify with debug output
+4. **Identify Root Cause**: Use evidence to pinpoint exactly which test is causing interference
+5. **Fix Root Cause**: Only make changes after understanding the exact problem
+6. **Add Safeguards**: Implement tests or assertions to catch the issue if it recurs
+
+#### Common Test Interference Patterns in Minitest
+
+**Problem**: Minitest spec-style tests (`describe` blocks) don't automatically inherit `TestHelpers` module methods:
+
+```ruby
+# ❌ Wrong - TestHelpers only included in Minitest::Test
+Minitest::Test.include(TestHelpers)
+
+# ✅ Correct - Include in both Test and Spec classes
+Minitest::Test.include(TestHelpers)
+Minitest::Spec.include(TestHelpers)
+```
+
+**Problem**: Spec-style tests use `before`/`after` blocks, not `setup`/`teardown` methods:
+
+```ruby
+# ❌ Wrong - Missing cleanup in spec-style tests
+describe "MyFeature" do
+  it "disables logging" do
+    InboundHttpLogger.disable!  # Modifies global state
+    # No cleanup - affects subsequent tests
+  end
+end
+
+# ✅ Correct - Proper cleanup in spec-style tests
+describe "MyFeature" do
+  before do
+    # Setup code
+  end
+
+  after do
+    # Cleanup global state modifications
+    InboundHttpLogger.disable!
+    InboundHttpLogger.clear_thread_data
+  end
+
+  it "disables logging" do
+    InboundHttpLogger.disable!
+    # Test code
+  end
+end
+```
+
+**Problem**: Global vs thread-local configuration confusion:
+
+```ruby
+# ❌ Wrong - Patches checking global state while tests use thread-local
+def patched_method
+  return super unless InboundHttpLogger.enabled?  # Global check
+  # But tests use: InboundHttpLogger.with_configuration(enabled: true)
+end
+
+# ✅ Correct - Patches check current configuration (respects thread-local)
+def patched_method
+  config = InboundHttpLogger.configuration  # Gets thread-local if present
+  return super unless config.enabled?
+end
+```
+
+#### Validation Techniques
+
+**Debug Configuration State**:
+```ruby
+# Add temporary debug output to understand state changes
+def enabled?
+  result = configuration.enabled?
+  if ENV['DEBUG_TESTS'] == 'true'
+    puts "DEBUG: enabled=#{result}, thread_override=#{!!Thread.current[:config_override]}"
+  end
+  result
+end
+```
+
+**Validate Setup/Teardown Execution**:
+```ruby
+def setup
+  puts "DEBUG: setup called" if ENV['DEBUG_TESTS'] == 'true'
+  # Setup code
+end
+
+def teardown
+  puts "DEBUG: teardown called" if ENV['DEBUG_TESTS'] == 'true'
+  # Cleanup code
+end
+```
+
+**Assert Expected State**:
+```ruby
+def test_something
+  # Validate assumptions at start of test
+  assert_equal false, InboundHttpLogger.enabled?, "Expected logging to be disabled at test start"
+
+  # Test code
+
+  # Validate state after test
+  assert_nil Thread.current[:config_override], "Expected no thread-local config after test"
+end
+```
+
+#### Prevention Strategies
+
+1. **Consistent Test Structure**: Use the same setup/teardown pattern across all test files
+2. **State Validation**: Add assertions to verify clean state at test boundaries
+3. **Isolation Helpers**: Provide helper methods that guarantee proper cleanup
+4. **Documentation**: Document non-standard patterns and their rationale
+
+**Rule**: Never guess at the cause of test interference. Always use systematic debugging to identify the exact root cause, then implement targeted fixes with safeguards to prevent recurrence.
+
+### 2. Isolated Test Environment
 
 The gem uses an in-memory SQLite database for testing, which provides excellent performance and isolation:
 
@@ -585,3 +806,16 @@ This gem prioritizes **reliability**, **performance**, **thread-safety**, and **
 7. Test thoroughly with isolated configurations
 
 The goal is to provide robust HTTP request logging that never interferes with the main application while offering powerful features for debugging and monitoring in both single-threaded and multi-threaded environments.
+
+## Common Pitfalls
+
+1. **Don't modify global configuration in tests** - Use `with_configuration` instead
+2. **Don't forget error handling** - All logging code must be failsafe
+3. **Don't ignore thread safety** - Use thread-local variables for request-specific data
+4. **Don't skip data filtering** - Always filter sensitive information
+5. **Don't block HTTP requests** - Logging errors must not propagate
+6. **Don't use `establish_connection` on secondary database models** - Interferes with Rails multi-database setup
+7. **Don't use `connects_to` with non-abstract model classes** - Causes "not allowed" errors
+8. **Don't use file-based test databases without cleanup** - Use in-memory SQLite for better performance
+9. **Don't use silent fallbacks between database connections** - Masks configuration issues and causes production problems
+10. **Don't let database errors crash the parent application** - Always handle connection and query errors gracefully
