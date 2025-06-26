@@ -2,7 +2,7 @@
 
 require 'rack'
 
-module InboundHttpLogger
+module InboundHTTPLogger
   module Middleware
     class LoggingMiddleware
       def initialize(app)
@@ -37,37 +37,37 @@ module InboundHttpLogger
           log_request(request, request_body, status, headers, response_body, duration_seconds)
         rescue StandardError => e
           # Log the error but don't let it affect the application
-          InboundHttpLogger.configuration.logger.error("Error logging inbound request: #{e.class}: #{e.message}")
-          InboundHttpLogger.configuration.logger.error(e.backtrace.join("\n")) if InboundHttpLogger.configuration.debug_logging
+          InboundHTTPLogger.configuration.logger.error("Error logging inbound request: #{e.class}: #{e.message}")
+          InboundHTTPLogger.configuration.logger.error(e.backtrace.join("\n")) if InboundHTTPLogger.configuration.debug_logging
         end
 
         # Return the response
         [status, headers, response]
       rescue StandardError => e
         # Log the error but don't let it affect the application
-        InboundHttpLogger.configuration.logger.error("Error in InboundHttpLogger::LoggingMiddleware: #{e.class}: #{e.message}")
-        InboundHttpLogger.configuration.logger.error(e.backtrace.join("\n")) if InboundHttpLogger.configuration.debug_logging
+        InboundHTTPLogger.configuration.logger.error("Error in InboundHTTPLogger::LoggingMiddleware: #{e.class}: #{e.message}")
+        InboundHTTPLogger.configuration.logger.error(e.backtrace.join("\n")) if InboundHTTPLogger.configuration.debug_logging
 
         # Re-raise to allow other error handlers to process it
         raise e
       ensure
         # Clear thread-local data after request
-        InboundHttpLogger.clear_thread_data
+        InboundHTTPLogger.clear_thread_data
       end
 
       private
 
         # Check if we should log this request (basic checks)
         def should_log_request?(env)
-          return false unless InboundHttpLogger.enabled?
+          return false unless InboundHTTPLogger.enabled?
 
           request = Rack::Request.new(env)
-          return false unless InboundHttpLogger.configuration.should_log_path?(request.path)
+          return false unless InboundHTTPLogger.configuration.should_log_path?(request.path)
 
           # Check controller-level exclusions if available
           if env['action_controller.instance']
             controller = env['action_controller.instance']
-            return false unless InboundHttpLogger.enabled_for?(controller.controller_name, controller.action_name)
+            return false unless InboundHTTPLogger.enabled_for?(controller.controller_name, controller.action_name)
           end
 
           true
@@ -76,7 +76,7 @@ module InboundHttpLogger
         # Check if we should log based on response
         def should_log_response?(_request, _status, headers)
           content_type = headers['Content-Type']&.split(';')&.first
-          InboundHttpLogger.configuration.should_log_content_type?(content_type)
+          InboundHTTPLogger.configuration.should_log_content_type?(content_type)
         end
 
         # Check if we should capture response body
@@ -85,7 +85,7 @@ module InboundHttpLogger
           return false if status >= 300 && status < 400 # Redirects typically don't have meaningful bodies
 
           content_type = headers['Content-Type']&.split(';')&.first
-          InboundHttpLogger.configuration.should_log_content_type?(content_type)
+          InboundHTTPLogger.configuration.should_log_content_type?(content_type)
         end
 
         # Read and parse request body
@@ -96,11 +96,11 @@ module InboundHttpLogger
           request.body.rewind # Rewind for downstream middleware
 
           return nil if body.blank?
-          return nil if body.bytesize > InboundHttpLogger.configuration.max_body_size
+          return nil if body.bytesize > InboundHTTPLogger.configuration.max_body_size
 
           parse_body(body, request.content_type)
         rescue StandardError => e
-          InboundHttpLogger.configuration.logger.error("Error reading request body: #{e.message}")
+          InboundHTTPLogger.configuration.logger.error("Error reading request body: #{e.message}")
           body&.first(1000) # Return first 1000 chars if parsing fails
         end
 
@@ -113,11 +113,11 @@ module InboundHttpLogger
           body = body_parts.join
 
           return nil if body.blank?
-          return nil if body.bytesize > InboundHttpLogger.configuration.max_body_size
+          return nil if body.bytesize > InboundHTTPLogger.configuration.max_body_size
 
           body
         rescue StandardError => e
-          InboundHttpLogger.configuration.logger.error("Error reading response body: #{e.message}")
+          InboundHTTPLogger.configuration.logger.error("Error reading response body: #{e.message}")
           nil
         end
 
@@ -136,7 +136,7 @@ module InboundHttpLogger
             begin
               Rack::Utils.parse_nested_query(body)
             rescue StandardError => e
-              InboundHttpLogger.configuration.logger.error("Error parsing form data: #{e.message}")
+              InboundHTTPLogger.configuration.logger.error("Error parsing form data: #{e.message}")
               body
             end
           else
@@ -147,7 +147,7 @@ module InboundHttpLogger
         # Log the request
         def log_request(request, request_body, status, headers, response_body, duration_seconds)
           # Log to main database
-          InboundHttpLogger::Models::InboundRequestLog.log_request(
+          InboundHTTPLogger::Models::InboundRequestLog.log_request(
             request,
             request_body,
             status,
@@ -157,15 +157,15 @@ module InboundHttpLogger
           )
 
           # Also log to secondary database if enabled
-          if InboundHttpLogger.configuration.secondary_database_enabled?
-            adapter = InboundHttpLogger.configuration.secondary_database_adapter_instance
+          if InboundHTTPLogger.configuration.secondary_database_enabled?
+            adapter = InboundHTTPLogger.configuration.secondary_database_adapter_instance
             adapter&.log_request(request, request_body, status, headers, response_body, duration_seconds)
           end
 
           # Also log to test database if test module is enabled
-          return unless defined?(InboundHttpLogger::Test) && InboundHttpLogger::Test.enabled?
+          return unless defined?(InboundHTTPLogger::Test) && InboundHTTPLogger::Test.enabled?
 
-          InboundHttpLogger::Test.log_request(request, request_body, status, headers, response_body, duration_seconds)
+          InboundHTTPLogger::Test.log_request(request, request_body, status, headers, response_body, duration_seconds)
         end
     end
   end

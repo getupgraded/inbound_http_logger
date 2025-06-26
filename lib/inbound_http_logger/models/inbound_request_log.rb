@@ -3,7 +3,7 @@
 require 'active_record'
 require 'rack'
 
-module InboundHttpLogger
+module InboundHTTPLogger
   module Models
     class InboundRequestLog < ActiveRecord::Base
       self.table_name = 'inbound_request_logs'
@@ -57,8 +57,8 @@ module InboundHttpLogger
       class << self
         # Log a completed request
         def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
-          return nil unless InboundHttpLogger.enabled?
-          return nil unless InboundHttpLogger.configuration.should_log_path?(request.path)
+          return nil unless InboundHTTPLogger.enabled?
+          return nil unless InboundHTTPLogger.configuration.should_log_path?(request.path)
 
           # Content type filtering is handled by middleware
 
@@ -80,8 +80,8 @@ module InboundHttpLogger
             end
 
             # Filter sensitive data
-            filtered_request_headers = InboundHttpLogger.configuration.filter_headers(extract_request_headers(request))
-            filtered_response_headers = InboundHttpLogger.configuration.filter_headers(headers)
+            filtered_request_headers = InboundHTTPLogger.configuration.filter_headers(extract_request_headers(request))
+            filtered_response_headers = InboundHTTPLogger.configuration.filter_headers(headers)
             filtered_request_body = filter_body_for_storage(request_body)
             filtered_response_body = filter_body_for_storage(response_body)
 
@@ -104,7 +104,7 @@ module InboundHttpLogger
               metadata: metadata
             )
           rescue StandardError => e
-            InboundHttpLogger.configuration.logger.error("Error logging inbound request: #{e.class}: #{e.message}")
+            InboundHTTPLogger.configuration.logger.error("Error logging inbound request: #{e.class}: #{e.message}")
             nil
           end
         end
@@ -112,7 +112,7 @@ module InboundHttpLogger
         # Shared logging logic for database adapters
         def build_log_data(request, request_body, status, headers, response_body, duration_seconds, options = {})
           return nil unless request&.path
-          return nil unless InboundHttpLogger.configuration.should_log_path?(request.path)
+          return nil unless InboundHTTPLogger.configuration.should_log_path?(request.path)
 
           # Calculate duration in milliseconds
           duration_ms = (duration_seconds * 1000).round(2)
@@ -131,8 +131,8 @@ module InboundHttpLogger
           end
 
           # Filter sensitive data
-          filtered_request_headers = InboundHttpLogger.configuration.filter_headers(extract_request_headers(request))
-          filtered_response_headers = InboundHttpLogger.configuration.filter_headers(headers)
+          filtered_request_headers = InboundHTTPLogger.configuration.filter_headers(extract_request_headers(request))
+          filtered_response_headers = InboundHTTPLogger.configuration.filter_headers(headers)
           filtered_request_body = filter_body_for_storage(request_body)
           filtered_response_body = filter_body_for_storage(response_body)
 
@@ -240,14 +240,14 @@ module InboundHttpLogger
           # Filter body for storage, handling JSONB vs JSON columns differently
           def filter_body_for_storage(body)
             return body unless body.is_a?(String) && body.present?
-            return body if body.bytesize > InboundHttpLogger.configuration.max_body_size
+            return body if body.bytesize > InboundHTTPLogger.configuration.max_body_size
 
             # For JSONB columns, we want to store parsed JSON objects to avoid double-parsing
             if using_jsonb?
               filter_body_for_jsonb(body)
             else
               # For regular JSON columns, use the standard filtering (which re-serializes)
-              InboundHttpLogger.configuration.filter_body(body)
+              InboundHTTPLogger.configuration.filter_body(body)
             end
           end
 
@@ -256,7 +256,7 @@ module InboundHttpLogger
             # Try to parse as JSON
             parsed = JSON.parse(body)
             # Filter sensitive data and return the parsed object (not re-serialized)
-            InboundHttpLogger.configuration.filter_sensitive_data(parsed)
+            InboundHTTPLogger.configuration.filter_sensitive_data(parsed)
           rescue JSON::ParserError
             # If not JSON, return as-is
             body

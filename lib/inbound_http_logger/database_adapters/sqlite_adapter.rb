@@ -3,7 +3,7 @@
 require 'fileutils'
 require_relative 'base_adapter'
 
-module InboundHttpLogger
+module InboundHTTPLogger
   module DatabaseAdapters
     class SqliteAdapter < BaseAdapter
       # Check if SQLite3 gem is available
@@ -12,7 +12,7 @@ module InboundHttpLogger
           require 'sqlite3'
           true
         rescue LoadError
-          InboundHttpLogger.configuration.logger.warn('SQLite3 gem not available. SQLite logging disabled.') if @database_url.present?
+          InboundHTTPLogger.configuration.logger.warn('SQLite3 gem not available. SQLite logging disabled.') if @database_url.present?
           false
         end
       end
@@ -78,16 +78,16 @@ module InboundHttpLogger
           use_default_connection = @database_url.blank?
 
           # If using default connection, just return the main model class
-          return InboundHttpLogger::Models::InboundRequestLog if use_default_connection
+          return InboundHTTPLogger::Models::InboundRequestLog if use_default_connection
 
           # Create a named class to avoid "Anonymous class is not allowed" error
           class_name = "SqliteRequestLog#{adapter_connection_name.to_s.camelize}"
 
           # Remove existing class if it exists
-          InboundHttpLogger::DatabaseAdapters.send(:remove_const, class_name) if InboundHttpLogger::DatabaseAdapters.const_defined?(class_name)
+          InboundHTTPLogger::DatabaseAdapters.send(:remove_const, class_name) if InboundHTTPLogger::DatabaseAdapters.const_defined?(class_name)
 
           # Create the new class that inherits from the main model
-          klass = Class.new(InboundHttpLogger::Models::InboundRequestLog) do
+          klass = Class.new(InboundHTTPLogger::Models::InboundRequestLog) do
             self.table_name = 'inbound_request_logs'
 
             # Store the connection name for use in connection method
@@ -104,13 +104,13 @@ module InboundHttpLogger
               end
             rescue ActiveRecord::ConnectionNotEstablished => e
               # Don't fall back silently - log the specific issue and re-raise
-              Rails.logger&.error "InboundHttpLogger: Cannot retrieve connection '#{@adapter_connection_name}': #{e.message}"
+              Rails.logger&.error "InboundHTTPLogger: Cannot retrieve connection '#{@adapter_connection_name}': #{e.message}"
               raise
             end
 
             class << self
               def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
-                log_data = InboundHttpLogger::Models::InboundRequestLog.build_log_data(
+                log_data = InboundHTTPLogger::Models::InboundRequestLog.build_log_data(
                   request, request_body, status, headers, response_body, duration_seconds, options
                 )
                 return nil unless log_data
@@ -138,7 +138,7 @@ module InboundHttpLogger
           end
 
           # Assign the class to a constant to give it a name
-          InboundHttpLogger::DatabaseAdapters.const_set(class_name, klass)
+          InboundHTTPLogger::DatabaseAdapters.const_set(class_name, klass)
 
           klass
         end

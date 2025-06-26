@@ -1,4 +1,4 @@
-# InboundHttpLogger
+# InboundHTTPLogger
 
 [![CI](https://github.com/getupgraded/inbound_http_logger/actions/workflows/test.yml/badge.svg)](https://github.com/getupgraded/inbound_http_logger/actions/workflows/test.yml)
 
@@ -43,7 +43,7 @@ rails db:migrate
 
 ```ruby
 # config/initializers/inbound_http_logger.rb
-InboundHttpLogger.configure do |config|
+InboundHTTPLogger.configure do |config|
   config.enabled = true
 
   # Optional: Add custom path exclusions
@@ -67,18 +67,18 @@ end
 
 ```ruby
 # config/environments/production.rb
-InboundHttpLogger.configure do |config|
+InboundHTTPLogger.configure do |config|
   config.enabled = true
   config.debug_logging = false
 end
 
 # config/environments/test.rb
-InboundHttpLogger.configure do |config|
+InboundHTTPLogger.configure do |config|
   config.enabled = false # Disable in tests for performance
 end
 
 # config/environments/development.rb
-InboundHttpLogger.configure do |config|
+InboundHTTPLogger.configure do |config|
   config.enabled = true
   config.debug_logging = true
 end
@@ -95,8 +95,8 @@ Once configured, the gem automatically logs all inbound HTTP requests to your **
 # PUT /products/123 -> logged to main Rails database
 
 # Query logs using ActiveRecord
-logs = InboundHttpLogger::Models::InboundRequestLog.recent
-error_logs = InboundHttpLogger::Models::InboundRequestLog.failed
+logs = InboundHTTPLogger::Models::InboundRequestLog.recent
+error_logs = InboundHTTPLogger::Models::InboundRequestLog.failed
 ```
 
 ## Additional Database Logging
@@ -118,7 +118,7 @@ The gem supports **optional** logging to an additional database alongside the ma
 
 ```ruby
 # config/initializers/inbound_http_logger.rb
-InboundHttpLogger.configure do |config|
+InboundHTTPLogger.configure do |config|
   # Enable logging to your main Rails database (default behavior)
   config.enabled = true
 
@@ -133,7 +133,7 @@ If you want to **also** log to a separate database (in addition to your main Rai
 
 ```ruby
 # config/initializers/inbound_http_logger.rb
-InboundHttpLogger.configure do |config|
+InboundHTTPLogger.configure do |config|
   config.enabled = true  # Main Rails database logging
 
   # OPTIONAL: Also log to an additional database
@@ -153,15 +153,15 @@ end
 
 ```ruby
 # Main database logging (always uses your Rails database)
-InboundHttpLogger.enable!   # Enable main database logging
-InboundHttpLogger.disable!  # Disable all logging
-InboundHttpLogger.enabled?  # Check if logging is enabled
+InboundHTTPLogger.enable!   # Enable main database logging
+InboundHTTPLogger.disable!  # Disable all logging
+InboundHTTPLogger.enabled?  # Check if logging is enabled
 
 # Additional database logging (optional, in addition to main database)
-InboundHttpLogger.enable_secondary_logging!('sqlite3:///log/requests.sqlite3')
-InboundHttpLogger.enable_secondary_logging!('postgresql://user:pass@host/logs')
-InboundHttpLogger.disable_secondary_logging!
-InboundHttpLogger.secondary_logging_enabled?
+InboundHTTPLogger.enable_secondary_logging!('sqlite3:///log/requests.sqlite3')
+InboundHTTPLogger.enable_secondary_logging!('postgresql://user:pass@host/logs')
+InboundHTTPLogger.disable_secondary_logging!
+InboundHTTPLogger.secondary_logging_enabled?
 ```
 
 ## Test Utilities
@@ -183,54 +183,54 @@ This design keeps production environments lean by only loading test utilities wh
 
 ```ruby
 # Configure test logging with separate database
-InboundHttpLogger::Test.configure(
+InboundHTTPLogger::Test.configure(
   database_url: 'sqlite3:///tmp/test_requests.sqlite3',
   adapter: :sqlite
 )
 
 # Or use PostgreSQL for tests
-InboundHttpLogger::Test.configure(
+InboundHTTPLogger::Test.configure(
   database_url: 'postgresql://localhost/test_logs',
   adapter: :postgresql
 )
 
 # Enable test logging
-InboundHttpLogger::Test.enable!
+InboundHTTPLogger::Test.enable!
 
 # Disable test logging
-InboundHttpLogger::Test.disable!
+InboundHTTPLogger::Test.disable!
 ```
 
 ### Test Utilities API
 
 ```ruby
 # Count all logged requests during tests
-total_requests = InboundHttpLogger::Test.logs_count
+total_requests = InboundHTTPLogger::Test.logs_count
 
 # Count requests by status code
-successful_requests = InboundHttpLogger::Test.logs_with_status(200)
-error_requests = InboundHttpLogger::Test.logs_with_status(500)
+successful_requests = InboundHTTPLogger::Test.logs_with_status(200)
+error_requests = InboundHTTPLogger::Test.logs_with_status(500)
 
 # Count requests for specific paths
-api_requests = InboundHttpLogger::Test.logs_for_path('/api/')
-user_requests = InboundHttpLogger::Test.logs_for_path('/users')
+api_requests = InboundHTTPLogger::Test.logs_for_path('/api/')
+user_requests = InboundHTTPLogger::Test.logs_for_path('/users')
 
 # Get all logged requests
-all_logs = InboundHttpLogger::Test.all_logs
+all_logs = InboundHTTPLogger::Test.all_logs
 
 # Get logs matching specific criteria
-failed_requests = InboundHttpLogger::Test.logs_matching(status: 500)
-api_posts = InboundHttpLogger::Test.logs_matching(method: 'POST', path: '/api')
+failed_requests = InboundHTTPLogger::Test.logs_matching(status: 500)
+api_posts = InboundHTTPLogger::Test.logs_matching(method: 'POST', path: '/api')
 
 # Analyze request patterns
-analysis = InboundHttpLogger::Test.analyze
+analysis = InboundHTTPLogger::Test.analyze
 # Returns: { total_requests: 100, success_rate: 95.0, error_rate: 5.0, ... }
 
 # Clear test logs manually (if needed)
-InboundHttpLogger::Test.clear_logs!
+InboundHTTPLogger::Test.clear_logs!
 
 # Reset test environment
-InboundHttpLogger::Test.reset!
+InboundHTTPLogger::Test.reset!
 ```
 
 ### Test Framework Integration
@@ -244,7 +244,7 @@ InboundHttpLogger::Test.reset!
 **Option 1: Configuration Isolation (Recommended)**
 ```ruby
 describe "My Feature" do
-  include InboundHttpLogger::Test::Helpers
+  include InboundHTTPLogger::Test::Helpers
 
   before do
     setup_inbound_http_logger_test_with_isolation(
@@ -264,13 +264,13 @@ end
 **Option 2: Manual Backup/Restore**
 ```ruby
 describe "My Feature" do
-  include InboundHttpLogger::Test::Helpers
+  include InboundHTTPLogger::Test::Helpers
 
   before do
     @config_backup = backup_inbound_http_logger_configuration
     setup_inbound_http_logger_test
 
-    InboundHttpLogger.configure do |config|
+    InboundHTTPLogger.configure do |config|
       config.enabled = true
       config.excluded_paths.clear
       config.excluded_content_types.clear
@@ -287,7 +287,7 @@ end
 **Option 3: Thread-Safe Configuration (Recommended for Parallel Testing)**
 ```ruby
 describe "My Feature" do
-  include InboundHttpLogger::Test::Helpers
+  include InboundHTTPLogger::Test::Helpers
 
   it "logs requests with thread-safe configuration" do
     # Uses the new simplified thread-safe configuration system
@@ -305,7 +305,7 @@ end
 **Option 4: Temporary Configuration Changes (Legacy)**
 ```ruby
 describe "My Feature" do
-  include InboundHttpLogger::Test::Helpers
+  include InboundHTTPLogger::Test::Helpers
 
   it "logs requests with custom configuration" do
     with_inbound_http_logger_configuration(
@@ -331,7 +331,7 @@ For system tests that make real HTTP requests through a browser, you need to ena
 require 'inbound_http_logger/test'  # Required for test utilities
 
 class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
-  include InboundHttpLogger::Test::Helpers
+  include InboundHTTPLogger::Test::Helpers
 
   setup do
     # Use isolated setup to avoid configuration pollution
@@ -368,7 +368,7 @@ end
 require 'inbound_http_logger/test'  # Required for test utilities
 
 class ActiveSupport::TestCase
-  include InboundHttpLogger::Test::Helpers
+  include InboundHTTPLogger::Test::Helpers
 
   setup do
     setup_inbound_http_logger_test_with_isolation(
@@ -393,16 +393,16 @@ class APITest < ActiveSupport::TestCase
     assert_request_count(2)
 
     # Or use direct API
-    assert_equal 2, InboundHttpLogger::Test.logs_count
-    assert_equal 1, InboundHttpLogger::Test.logs_with_status(200)
-    assert_equal 1, InboundHttpLogger::Test.logs_with_status(201)
+    assert_equal 2, InboundHTTPLogger::Test.logs_count
+    assert_equal 1, InboundHTTPLogger::Test.logs_with_status(200)
+    assert_equal 1, InboundHTTPLogger::Test.logs_with_status(201)
   end
 
   test "analyzes request patterns" do
     get '/api/users'    # 200
     get '/api/missing'  # 404
 
-    analysis = InboundHttpLogger::Test.analyze
+    analysis = InboundHTTPLogger::Test.analyze
     assert_equal 2, analysis[:total_requests]
     assert_equal 50.0, analysis[:success_rate]
     assert_equal 50.0, analysis[:error_rate]
@@ -417,7 +417,7 @@ end
 require 'inbound_http_logger/test'  # Required for test utilities
 
 RSpec.configure do |config|
-  config.include InboundHttpLogger::Test::Helpers
+  config.include InboundHTTPLogger::Test::Helpers
 
   config.before(:each) do
     setup_inbound_http_logger_test
@@ -433,7 +433,7 @@ RSpec.describe "API logging" do
   it "logs requests correctly" do
     get '/api/users'
 
-    expect(InboundHttpLogger::Test.logs_count).to eq(1)
+    expect(InboundHTTPLogger::Test.logs_count).to eq(1)
     assert_request_logged('GET', '/api/users')
     assert_success_rate(100.0)
   end
@@ -476,8 +476,8 @@ config.configure_secondary_database('sqlite3:///log/requests.sqlite3')
 config.configure_secondary_database('postgresql://user:pass@host/logs_db')
 
 # Programmatic control
-InboundHttpLogger.enable_secondary_logging!('sqlite3:///log/requests.sqlite3')
-InboundHttpLogger.disable_secondary_logging!
+InboundHTTPLogger.enable_secondary_logging!('sqlite3:///log/requests.sqlite3')
+InboundHTTPLogger.disable_secondary_logging!
 ```
 
 #### Test Setup
@@ -487,9 +487,9 @@ InboundHttpLogger.disable_secondary_logging!
 require 'inbound_http_logger/test'
 
 # Configure test logging
-InboundHttpLogger::Test.configure(database_url: 'sqlite3:///tmp/test.sqlite3')
-InboundHttpLogger::Test.enable!
-count = InboundHttpLogger::Test.logs_count
+InboundHTTPLogger::Test.configure(database_url: 'sqlite3:///tmp/test.sqlite3')
+InboundHTTPLogger::Test.enable!
+count = InboundHTTPLogger::Test.logs_count
 ```
 
 ### Key Benefits
@@ -506,7 +506,7 @@ Include the concern in your controllers for enhanced logging:
 
 ```ruby
 class ApplicationController < ActionController::Base
-  include InboundHttpLogger::Concerns::ControllerLogging
+  include InboundHTTPLogger::Concerns::ControllerLogging
 end
 
 class UsersController < ApplicationController
@@ -573,7 +573,7 @@ end
 
 ```ruby
 class ApplicationController < ActionController::Base
-  include InboundHttpLogger::Concerns::ControllerLogging
+  include InboundHTTPLogger::Concerns::ControllerLogging
 
   # Set context for all actions in this controller
   inbound_logging_context :set_global_context
@@ -625,7 +625,7 @@ class OrdersController < ApplicationController
 end
 
 class ApplicationController < ActionController::Base
-  include InboundHttpLogger::Concerns::ControllerLogging
+  include InboundHTTPLogger::Concerns::ControllerLogging
 
   # Global context for all controllers
   inbound_logging_context :set_global_context
@@ -652,17 +652,17 @@ end
 
 ```ruby
 # Find all logs
-logs = InboundHttpLogger::Models::InboundRequestLog.all
+logs = InboundHTTPLogger::Models::InboundRequestLog.all
 
 # Find by status code
-error_logs = InboundHttpLogger::Models::InboundRequestLog.failed
-success_logs = InboundHttpLogger::Models::InboundRequestLog.successful
+error_logs = InboundHTTPLogger::Models::InboundRequestLog.failed
+success_logs = InboundHTTPLogger::Models::InboundRequestLog.successful
 
 # Find slow requests (>1 second)
-slow_logs = InboundHttpLogger::Models::InboundRequestLog.slow(1000)
+slow_logs = InboundHTTPLogger::Models::InboundRequestLog.slow(1000)
 
 # Search functionality
-logs = InboundHttpLogger::Models::InboundRequestLog.search(
+logs = InboundHTTPLogger::Models::InboundRequestLog.search(
   q: 'users',           # Search in URL and body
   status: [200, 201],   # Filter by status codes
   method: 'POST',       # Filter by HTTP method
@@ -672,7 +672,7 @@ logs = InboundHttpLogger::Models::InboundRequestLog.search(
 )
 
 # Clean up old logs (older than 90 days)
-InboundHttpLogger::Models::InboundRequestLog.cleanup(90)
+InboundHTTPLogger::Models::InboundRequestLog.cleanup(90)
 ```
 
 ### Rake Tasks
@@ -743,16 +743,16 @@ When using PostgreSQL, the gem automatically uses JSONB columns for storing JSON
 
 ```ruby
 # Search for requests containing specific JSON data
-logs = InboundHttpLogger::Models::InboundRequestLog.with_response_containing('status', 'success')
+logs = InboundHTTPLogger::Models::InboundRequestLog.with_response_containing('status', 'success')
 
 # Use PostgreSQL JSON operators directly
-logs = InboundHttpLogger::Models::InboundRequestLog.where("response_body @> ?", { status: 'error' }.to_json)
+logs = InboundHTTPLogger::Models::InboundRequestLog.where("response_body @> ?", { status: 'error' }.to_json)
 
 # Search within nested JSON structures
-logs = InboundHttpLogger::Models::InboundRequestLog.where("response_body -> 'user' ->> 'role' = ?", 'admin')
+logs = InboundHTTPLogger::Models::InboundRequestLog.where("response_body -> 'user' ->> 'role' = ?", 'admin')
 
 # Use GIN indexes for fast text search within JSON
-logs = InboundHttpLogger::Models::InboundRequestLog.where("response_body::text ILIKE ?", '%error%')
+logs = InboundHTTPLogger::Models::InboundRequestLog.where("response_body::text ILIKE ?", '%error%')
 ```
 
 #### Database Compatibility
@@ -791,12 +791,12 @@ end
 ```ruby
 class AdminController < ApplicationController
   # Exclude entire controller
-  InboundHttpLogger.configuration.exclude_controller('admin')
+  InboundHTTPLogger.configuration.exclude_controller('admin')
 end
 
 class UsersController < ApplicationController
   # Exclude specific actions
-  InboundHttpLogger.configuration.exclude_action('users', 'internal')
+  InboundHTTPLogger.configuration.exclude_action('users', 'internal')
 
   # Or use controller methods
   skip_inbound_logging :internal, :debug
@@ -825,7 +825,7 @@ For parallel testing frameworks, use the thread-safe configuration override:
 
 ```ruby
 # Thread-safe configuration changes for testing
-InboundHttpLogger.with_configuration(enabled: true, debug_logging: true) do
+InboundHTTPLogger.with_configuration(enabled: true, debug_logging: true) do
   # Configuration changes only affect current thread
   # Other test threads are unaffected
   # Automatically restored when block exits
@@ -838,16 +838,16 @@ The Configuration class provides built-in backup and restore methods:
 
 ```ruby
 # Manual backup and restore for complex scenarios
-backup = InboundHttpLogger.global_configuration.backup
+backup = InboundHTTPLogger.global_configuration.backup
 begin
   # Make complex configuration changes
-  InboundHttpLogger.configure do |config|
+  InboundHTTPLogger.configure do |config|
     config.enabled = true
     config.excluded_paths.clear
   end
   # Perform operations
 ensure
-  InboundHttpLogger.global_configuration.restore(backup)
+  InboundHTTPLogger.global_configuration.restore(backup)
 end
 ```
 
@@ -861,53 +861,53 @@ All logging operations are wrapped in failsafe error handling. If logging fails 
 
 ```ruby
 # Main Database Configuration (uses your Rails database)
-InboundHttpLogger.configure { |config| ... }
-InboundHttpLogger.configuration
-InboundHttpLogger.enable!   # Enable logging to main Rails database
-InboundHttpLogger.disable!  # Disable all logging
-InboundHttpLogger.enabled?  # Check if main database logging is enabled
+InboundHTTPLogger.configure { |config| ... }
+InboundHTTPLogger.configuration
+InboundHTTPLogger.enable!   # Enable logging to main Rails database
+InboundHTTPLogger.disable!  # Disable all logging
+InboundHTTPLogger.enabled?  # Check if main database logging is enabled
 
 # Thread-Safe Configuration (for testing)
-InboundHttpLogger.with_configuration(**overrides) { ... }  # Thread-safe temporary config
-InboundHttpLogger.global_configuration                     # Access global config directly
-InboundHttpLogger.reset_configuration!                     # Reset to defaults (testing only)
+InboundHTTPLogger.with_configuration(**overrides) { ... }  # Thread-safe temporary config
+InboundHTTPLogger.global_configuration                     # Access global config directly
+InboundHTTPLogger.reset_configuration!                     # Reset to defaults (testing only)
 
 # Additional Database Logging (optional, in addition to main database)
-InboundHttpLogger.enable_secondary_logging!(url, adapter: :sqlite)
-InboundHttpLogger.disable_secondary_logging!
-InboundHttpLogger.secondary_logging_enabled?
+InboundHTTPLogger.enable_secondary_logging!(url, adapter: :sqlite)
+InboundHTTPLogger.disable_secondary_logging!
+InboundHTTPLogger.secondary_logging_enabled?
 ```
 
 ### Test Module Methods
 
 ```ruby
 # Configuration
-InboundHttpLogger::Test.configure(database_url:, adapter:)
-InboundHttpLogger::Test.enable!
-InboundHttpLogger::Test.disable!
-InboundHttpLogger::Test.enabled?
+InboundHTTPLogger::Test.configure(database_url:, adapter:)
+InboundHTTPLogger::Test.enable!
+InboundHTTPLogger::Test.disable!
+InboundHTTPLogger::Test.enabled?
 
 # Logging
-InboundHttpLogger::Test.log_request(request, body, status, headers, response, duration)
+InboundHTTPLogger::Test.log_request(request, body, status, headers, response, duration)
 
 # Querying
-InboundHttpLogger::Test.logs_count
-InboundHttpLogger::Test.logs_with_status(status)
-InboundHttpLogger::Test.logs_for_path(path)
-InboundHttpLogger::Test.all_logs
-InboundHttpLogger::Test.logs_matching(criteria)
-InboundHttpLogger::Test.analyze
+InboundHTTPLogger::Test.logs_count
+InboundHTTPLogger::Test.logs_with_status(status)
+InboundHTTPLogger::Test.logs_for_path(path)
+InboundHTTPLogger::Test.all_logs
+InboundHTTPLogger::Test.logs_matching(criteria)
+InboundHTTPLogger::Test.analyze
 
 # Management
-InboundHttpLogger::Test.clear_logs!
-InboundHttpLogger::Test.reset!
+InboundHTTPLogger::Test.clear_logs!
+InboundHTTPLogger::Test.reset!
 ```
 
 ### Test Helpers
 
 ```ruby
 # Include in test classes
-include InboundHttpLogger::Test::Helpers
+include InboundHTTPLogger::Test::Helpers
 
 # Configuration Management
 backup_inbound_http_logger_configuration
@@ -935,7 +935,7 @@ assert_success_rate(expected_rate, tolerance: 0.1)
 ```ruby
 # This causes test pollution!
 before do
-  InboundHttpLogger.configure do |config|
+  InboundHTTPLogger.configure do |config|
     config.excluded_paths.clear  # Permanently modifies global state
     config.excluded_content_types.clear
   end
@@ -975,30 +975,30 @@ end
 ```ruby
 # WARNING: Only use in controlled environments
 # This loses all initializer customizations
-InboundHttpLogger.reset_configuration!
+InboundHTTPLogger.reset_configuration!
 
 # Create fresh configuration with defaults
-fresh_config = InboundHttpLogger.create_fresh_configuration
+fresh_config = InboundHTTPLogger.create_fresh_configuration
 ```
 
 ### Model Methods
 
 ```ruby
 # Querying
-InboundHttpLogger::Models::InboundRequestLog.search(params)
-InboundHttpLogger::Models::InboundRequestLog.recent
-InboundHttpLogger::Models::InboundRequestLog.with_status(status)
-InboundHttpLogger::Models::InboundRequestLog.with_method(method)
-InboundHttpLogger::Models::InboundRequestLog.successful
-InboundHttpLogger::Models::InboundRequestLog.failed
-InboundHttpLogger::Models::InboundRequestLog.slow(threshold_ms)
+InboundHTTPLogger::Models::InboundRequestLog.search(params)
+InboundHTTPLogger::Models::InboundRequestLog.recent
+InboundHTTPLogger::Models::InboundRequestLog.with_status(status)
+InboundHTTPLogger::Models::InboundRequestLog.with_method(method)
+InboundHTTPLogger::Models::InboundRequestLog.successful
+InboundHTTPLogger::Models::InboundRequestLog.failed
+InboundHTTPLogger::Models::InboundRequestLog.slow(threshold_ms)
 
 # PostgreSQL JSONB methods
-InboundHttpLogger::Models::InboundRequestLog.with_response_containing(key, value)
-InboundHttpLogger::Models::InboundRequestLog.with_request_containing(key, value)
+InboundHTTPLogger::Models::InboundRequestLog.with_response_containing(key, value)
+InboundHTTPLogger::Models::InboundRequestLog.with_request_containing(key, value)
 
 # Management
-InboundHttpLogger::Models::InboundRequestLog.cleanup(older_than_days)
+InboundHTTPLogger::Models::InboundRequestLog.cleanup(older_than_days)
 ```
 
 ### Configuration Options
@@ -1055,7 +1055,7 @@ git config core.hooksPath githooks
 
 For system tests to work with HTTP logging, ensure:
 
-1. **Main logging enabled**: `InboundHttpLogger.enable!` in system test setup
+1. **Main logging enabled**: `InboundHTTPLogger.enable!` in system test setup
 2. **Test utilities configured**: `setup_inbound_http_logger_test` with database URL
 3. **Middleware active**: The Rails middleware stack includes the logging middleware
 4. **Database setup**: Test database can be SQLite or PostgreSQL
@@ -1066,16 +1066,16 @@ If system tests aren't logging requests:
 
 ```ruby
 # Check if logging is enabled
-puts "Main logging: #{InboundHttpLogger.enabled?}"
-puts "Test logging: #{InboundHttpLogger::Test.enabled?}"
+puts "Main logging: #{InboundHTTPLogger.enabled?}"
+puts "Test logging: #{InboundHTTPLogger::Test.enabled?}"
 
 # Check middleware is active
 middleware_names = Rails.application.middleware.map(&:name)
-puts "Middleware active: #{middleware_names.include?('InboundHttpLogger::Middleware::LoggingMiddleware')}"
+puts "Middleware active: #{middleware_names.include?('InboundHTTPLogger::Middleware::LoggingMiddleware')}"
 
 # Check request counts
-puts "Main DB requests: #{InboundHttpLogger::Models::InboundRequestLog.count}"
-puts "Test DB requests: #{InboundHttpLogger::Test.logs_count}"
+puts "Main DB requests: #{InboundHTTPLogger::Models::InboundRequestLog.count}"
+puts "Test DB requests: #{InboundHTTPLogger::Test.logs_count}"
 ```
 
 ## Future Enhancements

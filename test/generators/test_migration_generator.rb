@@ -9,11 +9,11 @@ require 'inbound_http_logger/generators/migration_generator'
 require 'tmpdir'
 require 'fileutils'
 
-describe InboundHttpLogger::Generators::MigrationGenerator do
+describe InboundHTTPLogger::Generators::MigrationGenerator do
   before do
     @tmp = Dir.mktmpdir
     FileUtils.mkdir_p(File.join(@tmp, 'db/migrate'))
-    InboundHttpLogger::Generators::MigrationGenerator.start([], destination_root: @tmp)
+    InboundHTTPLogger::Generators::MigrationGenerator.start([], destination_root: @tmp)
     @migration_path = Dir.glob(File.join(@tmp, 'db/migrate/*.rb')).first
     load @migration_path
     ActiveRecord::Migration.verbose = false

@@ -17,7 +17,7 @@ require_relative 'inbound_http_logger/middleware/logging_middleware'
 require_relative 'inbound_http_logger/concerns/controller_logging'
 require_relative 'inbound_http_logger/railtie' if defined?(Rails)
 
-module InboundHttpLogger
+module InboundHTTPLogger
   class Error < StandardError; end
 
   class << self

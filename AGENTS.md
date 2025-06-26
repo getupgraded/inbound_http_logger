@@ -41,7 +41,7 @@ class TestDatabaseAdapters < Minitest::Test
 end
 
 # Spec style (for feature-focused tests)
-describe "InboundHttpLogger::Models::InboundRequestLog" do
+describe "InboundHTTPLogger::Models::InboundRequestLog" do
   before do
     # Setup code
   end
@@ -209,10 +209,10 @@ t.references :loggable, polymorphic: true, type: :bigint, index: true
 ## Configuration System
 
 ### 1. Centralized Configuration
-All configuration goes through `InboundHttpLogger::Configuration`:
+All configuration goes through `InboundHTTPLogger::Configuration`:
 
 ```ruby
-InboundHttpLogger.configure do |config|
+InboundHTTPLogger.configure do |config|
   config.enabled = true
   config.max_body_size = 50_000
   config.excluded_paths << %r{/internal-api}
@@ -265,7 +265,7 @@ The gem implements a simple thread-safe configuration system for parallel testin
 
 ```ruby
 # Thread-safe temporary configuration override
-InboundHttpLogger.with_configuration(enabled: true, debug_logging: true) do
+InboundHTTPLogger.with_configuration(enabled: true, debug_logging: true) do
   # Configuration changes only affect current thread
   # Automatically restored when block exits
   # Safe for parallel testing
@@ -285,9 +285,9 @@ Thread.current[:inbound_http_logger_loggable] = object
 ### 3. Configuration Backup and Restore
 ```ruby
 # Configuration class handles its own serialization
-backup = InboundHttpLogger.global_configuration.backup
+backup = InboundHTTPLogger.global_configuration.backup
 # ... make changes ...
-InboundHttpLogger.global_configuration.restore(backup)
+InboundHTTPLogger.global_configuration.restore(backup)
 ```
 
 **Rule**: The Configuration class encapsulates backup/restore logic. Use these methods instead of manually copying configuration attributes.
@@ -297,7 +297,7 @@ InboundHttpLogger.global_configuration.restore(backup)
 ### 5. Dependency Injection for Rails Integration
 ```ruby
 # Avoid direct Rails calls by injecting dependencies
-InboundHttpLogger.configure do |config|
+InboundHTTPLogger.configure do |config|
   config.logger_factory = -> { MyCustomLogger.new }
   config.cache_adapter = MyCustomCache.new
 end
@@ -318,7 +318,7 @@ ActiveRecord::Base.configurations.configurations << ActiveRecord::DatabaseConfig
 )
 
 # ✅ Correct - Dynamic model classes with custom connection method
-klass = Class.new(InboundHttpLogger::Models::InboundRequestLog) do
+klass = Class.new(InboundHTTPLogger::Models::InboundRequestLog) do
   @adapter_connection_name = adapter_connection_name
 
   def self.connection
@@ -357,11 +357,11 @@ def log_request(...)
     model_class.create!(request_data)
   rescue ActiveRecord::ConnectionNotEstablished => e
     # Log error but don't crash the app
-    logger.error "InboundHttpLogger: Database connection failed: #{e.message}"
+    logger.error "InboundHTTPLogger: Database connection failed: #{e.message}"
     return false
   rescue StandardError => e
     # Log unexpected errors but don't crash the app
-    logger.error "InboundHttpLogger: Failed to log request: #{e.message}"
+    logger.error "InboundHTTPLogger: Failed to log request: #{e.message}"
     return false
   end
 end
@@ -377,7 +377,7 @@ def connection
   end
 rescue ActiveRecord::ConnectionNotEstablished => e
   # Don't fall back silently - log the specific issue
-  logger.error "InboundHttpLogger: Cannot retrieve connection '#{@adapter_connection_name}': #{e.message}"
+  logger.error "InboundHTTPLogger: Cannot retrieve connection '#{@adapter_connection_name}': #{e.message}"
   raise
 end
 
@@ -447,7 +447,7 @@ Minitest::Spec.include(TestHelpers)
 # ❌ Wrong - Missing cleanup in spec-style tests
 describe "MyFeature" do
   it "disables logging" do
-    InboundHttpLogger.disable!  # Modifies global state
+    InboundHTTPLogger.disable!  # Modifies global state
     # No cleanup - affects subsequent tests
   end
 end
@@ -460,12 +460,12 @@ describe "MyFeature" do
 
   after do
     # Cleanup global state modifications
-    InboundHttpLogger.disable!
-    InboundHttpLogger.clear_thread_data
+    InboundHTTPLogger.disable!
+    InboundHTTPLogger.clear_thread_data
   end
 
   it "disables logging" do
-    InboundHttpLogger.disable!
+    InboundHTTPLogger.disable!
     # Test code
   end
 end
@@ -476,13 +476,13 @@ end
 ```ruby
 # ❌ Wrong - Patches checking global state while tests use thread-local
 def patched_method
-  return super unless InboundHttpLogger.enabled?  # Global check
-  # But tests use: InboundHttpLogger.with_configuration(enabled: true)
+  return super unless InboundHTTPLogger.enabled?  # Global check
+  # But tests use: InboundHTTPLogger.with_configuration(enabled: true)
 end
 
 # ✅ Correct - Patches check current configuration (respects thread-local)
 def patched_method
-  config = InboundHttpLogger.configuration  # Gets thread-local if present
+  config = InboundHTTPLogger.configuration  # Gets thread-local if present
   return super unless config.enabled?
 end
 ```
@@ -518,7 +518,7 @@ end
 ```ruby
 def test_something
   # Validate assumptions at start of test
-  assert_equal false, InboundHttpLogger.enabled?, "Expected logging to be disabled at test start"
+  assert_equal false, InboundHTTPLogger.enabled?, "Expected logging to be disabled at test start"
 
   # Test code
 
@@ -548,7 +548,7 @@ ActiveRecord::Base.establish_connection(
 )
 
 # lib/inbound_http_logger/test.rb - Separate test database for test utilities
-module InboundHttpLogger::Test
+module InboundHTTPLogger::Test
   def configure(database_url: nil, adapter: :sqlite)
     # Uses separate SQLite file or in-memory database
     # Default: 'tmp/test_inbound_http_requests.sqlite3'
@@ -569,7 +569,7 @@ end
 ```ruby
 # Thread-safe configuration for parallel tests
 def test_with_custom_config
-  InboundHttpLogger.with_configuration(enabled: true, debug_logging: true) do
+  InboundHTTPLogger.with_configuration(enabled: true, debug_logging: true) do
     # This configuration is isolated to current thread
     # Other test threads are unaffected
     perform_test_actions
@@ -591,8 +591,8 @@ end
 ```ruby
 # Minitest helpers
 def setup_inbound_http_logger_test
-  InboundHttpLogger::Test.configure
-  InboundHttpLogger::Test.enable!
+  InboundHTTPLogger::Test.configure
+  InboundHTTPLogger::Test.enable!
 end
 
 # Thread-safe test setup
@@ -647,7 +647,7 @@ end
 ### 2. Middleware Integration
 ```ruby
 # Railtie integration
-config.middleware.use InboundHttpLogger::Middleware::LoggingMiddleware
+config.middleware.use InboundHTTPLogger::Middleware::LoggingMiddleware
 ```
 
 **Rule**: Integrate with Rails middleware stack properly. Respect middleware ordering.
@@ -685,8 +685,8 @@ The gem uses a non-standard but justified pattern where filter methods are place
 
 ```ruby
 # Filter methods on configuration object
-InboundHttpLogger.configuration.filter_headers(headers)
-InboundHttpLogger.configuration.filter_sensitive_data(parsed_data)
+InboundHTTPLogger.configuration.filter_headers(headers)
+InboundHTTPLogger.configuration.filter_sensitive_data(parsed_data)
 ```
 
 **Rationale**:
@@ -770,10 +770,10 @@ end
 ### Configuration Backup/Restore Pattern
 ```ruby
 # Manual backup and restore for complex scenarios
-backup = InboundHttpLogger.global_configuration.backup
+backup = InboundHTTPLogger.global_configuration.backup
 begin
   # Make complex configuration changes
-  InboundHttpLogger.configure do |config|
+  InboundHTTPLogger.configure do |config|
     config.enabled = true
     config.excluded_paths.clear
     config.excluded_paths << /custom_pattern/
@@ -781,14 +781,14 @@ begin
 
   # Perform operations
 ensure
-  InboundHttpLogger.global_configuration.restore(backup)
+  InboundHTTPLogger.global_configuration.restore(backup)
 end
 ```
 
 ### Dependency Injection Pattern
 ```ruby
 # Avoid direct Rails dependencies
-InboundHttpLogger.configure do |config|
+InboundHTTPLogger.configure do |config|
   config.logger_factory = -> { Rails.logger }
   config.cache_adapter = Rails.cache
 end

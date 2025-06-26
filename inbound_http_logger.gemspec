@@ -4,7 +4,7 @@ require_relative 'lib/inbound_http_logger/version'
 
 Gem::Specification.new do |spec|
   spec.name = 'inbound_http_logger'
-  spec.version = InboundHttpLogger::VERSION
+  spec.version = InboundHTTPLogger::VERSION
   spec.authors = ['Ziad Sawalha']
   spec.email = ['ziad@getupgraded.com']
 

@@ -2,8 +2,8 @@
 
 require 'test_helper'
 
-describe InboundHttpLogger::Models::InboundRequestLog do
-  let(:model) { InboundHttpLogger::Models::InboundRequestLog }
+describe InboundHTTPLogger::Models::InboundRequestLog do
+  let(:model) { InboundHTTPLogger::Models::InboundRequestLog }
 
   describe 'validations' do
     it 'requires http_method' do
@@ -100,7 +100,7 @@ describe InboundHttpLogger::Models::InboundRequestLog do
 
   describe '.log_request' do
     before do
-      InboundHttpLogger.enable!
+      InboundHTTPLogger.enable!
     end
 
     it 'creates a log entry with all data' do
@@ -128,7 +128,7 @@ describe InboundHttpLogger::Models::InboundRequestLog do
     end
 
     it 'returns nil when logging is disabled' do
-      InboundHttpLogger.disable!
+      InboundHTTPLogger.disable!
 
       request = create_rack_request(method: 'GET', path: '/users')
       log = model.log_request(request, nil, 200, {}, nil, 0.1)
@@ -162,7 +162,7 @@ describe InboundHttpLogger::Models::InboundRequestLog do
     end
 
     it 'includes metadata from thread-local storage' do
-      InboundHttpLogger.set_metadata({ user_id: 123 })
+      InboundHTTPLogger.set_metadata({ user_id: 123 })
 
       request = create_rack_request(method: 'GET', path: '/users')
       log = model.log_request(request, nil, 200, {}, nil, 0.1)
@@ -323,7 +323,7 @@ describe InboundHttpLogger::Models::InboundRequestLog do
 
   describe 'JSONB functionality' do
     before do
-      InboundHttpLogger.enable!
+      InboundHTTPLogger.enable!
     end
 
     it 'detects JSONB usage correctly' do
