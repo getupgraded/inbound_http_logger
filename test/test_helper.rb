@@ -15,6 +15,8 @@ require 'rack/mock'
 require 'inbound_http_logger'
 
 # Set up in-memory SQLite database for testing
+# Note: We use establish_connection here only for the main test suite
+# This is acceptable in test helpers but should not be done in production gem code
 ActiveRecord::Base.establish_connection(
   adapter: 'sqlite3',
   database: ':memory:'
@@ -65,11 +67,41 @@ end
 
 # JSON columns are automatically handled in Rails 8.0+
 
+# Configure the gem to use the default connection in tests
+# This ensures all tests use the same in-memory database with the table
+module InboundHttpLogger
+  module Test
+    def self.configure(adapter:, connection_string: nil)
+      # In test mode, explicitly configure the gem to use the default connection
+      # This ensures all tests use the same in-memory database with the table
+      case adapter
+      when :sqlite
+        InboundHttpLogger.configure do |config|
+          config.enabled = true
+          config.adapter = :sqlite
+          # Don't set database_url - this will make the adapter use the default connection
+          config.database_url = nil
+        end
+      when :postgresql
+        InboundHttpLogger.configure do |config|
+          config.enabled = true
+          config.adapter = :postgresql
+          # Don't set database_url - this will make the adapter use the default connection
+          config.database_url = nil
+        end
+      end
+    end
+  end
+end
+
 # Test helper methods for gem internal tests
 module TestHelpers
   def setup
-    # Reset configuration to defaults but don't nil it
-    config = InboundHttpLogger.configuration
+    # Reset database adapter cache
+    InboundHttpLogger::Models::InboundRequestLog.reset_adapter_cache!
+
+    # Reset global configuration to defaults but don't nil it
+    config = InboundHttpLogger.global_configuration
     config.enabled = false
     config.debug_logging = false
     config.max_body_size = 10_000
@@ -166,20 +198,29 @@ module TestHelpers
     # Clear all logs (only if table exists)
     InboundHttpLogger::Models::InboundRequestLog.delete_all if ActiveRecord::Base.connection.table_exists?(:inbound_request_logs)
 
-    # Clear thread-local data
-    InboundHttpLogger.clear_thread_data
-
     # Reset WebMock
     WebMock.reset!
     WebMock.disable_net_connect!
   end
 
   def teardown
+    # Optional: Check for leftover thread-local data before cleanup
+    # This helps identify tests that don't clean up properly
+    # Enable with: STRICT_TEST_ISOLATION=true
+    if ENV['STRICT_TEST_ISOLATION'] == 'true'
+      begin
+        assert_no_leftover_thread_data!
+      rescue StandardError => e
+        # Log the error but don't fail the test - just warn
+        puts "\n⚠️  #{e.message}"
+      end
+    end
+
     # Disable logging
     InboundHttpLogger.disable!
 
-    # Clear thread-local data
-    InboundHttpLogger.clear_thread_data
+    # Clear thread-local data (use comprehensive cleanup in teardown)
+    InboundHttpLogger.clear_all_thread_data
   end
 
   def with_logging_enabled
@@ -236,3 +277,4 @@ end
 
 # Include test helpers in all test classes
 Minitest::Test.include(TestHelpers)
+Minitest::Spec.include(TestHelpers)

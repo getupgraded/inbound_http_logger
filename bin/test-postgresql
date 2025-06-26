@@ -3,6 +3,7 @@
 
 # Test script specifically for PostgreSQL functionality
 require 'bundler/setup'
+require 'uri'
 
 puts "🐘 Testing PostgreSQL functionality..."
 

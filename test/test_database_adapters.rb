@@ -8,16 +8,6 @@ require 'inbound_http_logger/test'
 class TestDatabaseAdapters < Minitest::Test
   include TestHelpers
 
-  def setup
-    super
-    InboundHttpLogger.enable!
-  end
-
-  def teardown
-    InboundHttpLogger.disable!
-    super
-  end
-
   def test_sqlite_adapter_creates_model_class_that_inherits_from_inbound_request_log
     adapter = InboundHttpLogger::DatabaseAdapters::SqliteAdapter.new('sqlite3:///tmp/test.sqlite3', :test_sqlite)
     model_class = adapter.send(:create_model_class)
@@ -88,10 +78,10 @@ class TestDatabaseAdapters < Minitest::Test
     # Create a mock request
     require 'rack'
     env = Rack::MockRequest.env_for('/test', method: 'GET')
-    request = Rack::Request.new(env)
+    Rack::Request.new(env)
 
-    # Log a request
-    InboundHttpLogger::Test.log_request(request, nil, 200, {}, 'response', 0.1)
+    # Log a request directly using the test adapter
+    InboundHttpLogger::Test.log_request(:get, '/test', {}, { status_code: 200 }, 0.1)
 
     # Test the all_calls method
     calls = InboundHttpLogger::Test.all_calls
@@ -111,10 +101,10 @@ class TestDatabaseAdapters < Minitest::Test
     # Create a mock request
     require 'rack'
     env = Rack::MockRequest.env_for('/pg-test', method: 'POST')
-    request = Rack::Request.new(env)
+    Rack::Request.new(env)
 
-    # Log a request
-    InboundHttpLogger::Test.log_request(request, '{"test": true}', 201, {}, '{"success": true}', 0.2)
+    # Log a request directly using the test adapter
+    InboundHttpLogger::Test.log_request(:post, '/pg-test', { body: '{"test": true}' }, { status_code: 201, body: '{"success": true}' }, 0.2)
 
     # Test the all_calls method
     calls = InboundHttpLogger::Test.all_calls
