@@ -69,21 +69,21 @@ end
 
 # Configure the gem to use the default connection in tests
 # This ensures all tests use the same in-memory database with the table
-module InboundHttpLogger
+module InboundHTTPLogger
   module Test
     def self.configure(adapter:, connection_string: nil)
       # In test mode, explicitly configure the gem to use the default connection
       # This ensures all tests use the same in-memory database with the table
       case adapter
       when :sqlite
-        InboundHttpLogger.configure do |config|
+        InboundHTTPLogger.configure do |config|
           config.enabled = true
           config.adapter = :sqlite
           # Don't set database_url - this will make the adapter use the default connection
           config.database_url = nil
         end
       when :postgresql
-        InboundHttpLogger.configure do |config|
+        InboundHTTPLogger.configure do |config|
           config.enabled = true
           config.adapter = :postgresql
           # Don't set database_url - this will make the adapter use the default connection
@@ -98,10 +98,10 @@ end
 module TestHelpers
   def setup
     # Reset database adapter cache
-    InboundHttpLogger::Models::InboundRequestLog.reset_adapter_cache!
+    InboundHTTPLogger::Models::InboundRequestLog.reset_adapter_cache!
 
     # Reset global configuration to defaults but don't nil it
-    config = InboundHttpLogger.global_configuration
+    config = InboundHTTPLogger.global_configuration
     config.enabled = false
     config.debug_logging = false
     config.max_body_size = 10_000
@@ -196,7 +196,7 @@ module TestHelpers
                                       ])
 
     # Clear all logs (only if table exists)
-    InboundHttpLogger::Models::InboundRequestLog.delete_all if ActiveRecord::Base.connection.table_exists?(:inbound_request_logs)
+    InboundHTTPLogger::Models::InboundRequestLog.delete_all if ActiveRecord::Base.connection.table_exists?(:inbound_request_logs)
 
     # Reset WebMock
     WebMock.reset!
@@ -217,27 +217,27 @@ module TestHelpers
     end
 
     # Disable logging
-    InboundHttpLogger.disable!
+    InboundHTTPLogger.disable!
 
     # Clear thread-local data (use comprehensive cleanup in teardown)
-    InboundHttpLogger.clear_all_thread_data
+    InboundHTTPLogger.clear_all_thread_data
   end
 
   def with_logging_enabled
-    InboundHttpLogger.enable!
+    InboundHTTPLogger.enable!
     yield
   ensure
-    InboundHttpLogger.disable!
+    InboundHTTPLogger.disable!
   end
 
   # Thread-safe configuration override for simple attribute changes
   # This is the recommended method for parallel testing
   def with_thread_safe_configuration(**overrides, &block)
-    InboundHttpLogger.with_configuration(**overrides, &block)
+    InboundHTTPLogger.with_configuration(**overrides, &block)
   end
 
   def assert_request_logged(method, url, status_code = nil)
-    logs = InboundHttpLogger::Models::InboundRequestLog.where(
+    logs = InboundHTTPLogger::Models::InboundRequestLog.where(
       http_method: method.to_s.upcase,
       url: url
     )
@@ -249,7 +249,7 @@ module TestHelpers
   end
 
   def assert_no_request_logged(method = nil, url = nil)
-    scope = InboundHttpLogger::Models::InboundRequestLog.all
+    scope = InboundHTTPLogger::Models::InboundRequestLog.all
     scope = scope.where(http_method: method.to_s.upcase) if method
     scope = scope.where(url: url) if url
 

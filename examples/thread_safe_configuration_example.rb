@@ -8,16 +8,16 @@ puts "=== Thread-Safe Configuration Example ==="
 puts
 
 # Set up initial configuration
-InboundHttpLogger.configure do |config|
+InboundHTTPLogger.configure do |config|
   config.enabled = false
   config.debug_logging = false
   config.max_body_size = 10_000
 end
 
 puts "Initial configuration:"
-puts "  enabled: #{InboundHttpLogger.configuration.enabled?}"
-puts "  debug_logging: #{InboundHttpLogger.configuration.debug_logging}"
-puts "  max_body_size: #{InboundHttpLogger.configuration.max_body_size}"
+puts "  enabled: #{InboundHTTPLogger.configuration.enabled?}"
+puts "  debug_logging: #{InboundHTTPLogger.configuration.debug_logging}"
+puts "  max_body_size: #{InboundHTTPLogger.configuration.max_body_size}"
 puts
 
 # Demonstrate thread-safe configuration overrides
@@ -28,7 +28,7 @@ results = []
 threads = 3.times.map do |i|
   Thread.new do
     # Each thread gets its own configuration context
-    InboundHttpLogger.with_configuration(
+    InboundHTTPLogger.with_configuration(
       enabled: i.even?,
       debug_logging: i.odd?,
       max_body_size: 1000 * (i + 1)
@@ -37,9 +37,9 @@ threads = 3.times.map do |i|
 
       results[i] = {
         thread_id: i,
-        enabled: InboundHttpLogger.configuration.enabled?,
-        debug_logging: InboundHttpLogger.configuration.debug_logging,
-        max_body_size: InboundHttpLogger.configuration.max_body_size
+        enabled: InboundHTTPLogger.configuration.enabled?,
+        debug_logging: InboundHTTPLogger.configuration.debug_logging,
+        max_body_size: InboundHTTPLogger.configuration.max_body_size
       }
 
       puts "Thread #{i} configuration:"
@@ -55,26 +55,26 @@ puts
 
 # Verify configuration was restored
 puts "Configuration after threads completed:"
-puts "  enabled: #{InboundHttpLogger.configuration.enabled?}"
-puts "  debug_logging: #{InboundHttpLogger.configuration.debug_logging}"
-puts "  max_body_size: #{InboundHttpLogger.configuration.max_body_size}"
+puts "  enabled: #{InboundHTTPLogger.configuration.enabled?}"
+puts "  debug_logging: #{InboundHTTPLogger.configuration.debug_logging}"
+puts "  max_body_size: #{InboundHTTPLogger.configuration.max_body_size}"
 puts
 
 # Demonstrate nested configuration overrides
 puts "=== Nested Configuration Overrides ==="
 puts
 
-InboundHttpLogger.with_configuration(enabled: true) do
-  puts "Outer override - enabled: #{InboundHttpLogger.configuration.enabled?}"
+InboundHTTPLogger.with_configuration(enabled: true) do
+  puts "Outer override - enabled: #{InboundHTTPLogger.configuration.enabled?}"
 
-  InboundHttpLogger.with_configuration(debug_logging: true) do
-    puts "Inner override - enabled: #{InboundHttpLogger.configuration.enabled?}, debug_logging: #{InboundHttpLogger.configuration.debug_logging}"
+  InboundHTTPLogger.with_configuration(debug_logging: true) do
+    puts "Inner override - enabled: #{InboundHTTPLogger.configuration.enabled?}, debug_logging: #{InboundHTTPLogger.configuration.debug_logging}"
   end
 
-  puts "Back to outer - enabled: #{InboundHttpLogger.configuration.enabled?}, debug_logging: #{InboundHttpLogger.configuration.debug_logging}"
+  puts "Back to outer - enabled: #{InboundHTTPLogger.configuration.enabled?}, debug_logging: #{InboundHTTPLogger.configuration.debug_logging}"
 end
 
-puts "Back to original - enabled: #{InboundHttpLogger.configuration.enabled?}, debug_logging: #{InboundHttpLogger.configuration.debug_logging}"
+puts "Back to original - enabled: #{InboundHTTPLogger.configuration.enabled?}, debug_logging: #{InboundHTTPLogger.configuration.debug_logging}"
 puts
 
 # Demonstrate dependency injection
@@ -84,10 +84,10 @@ puts
 require 'stringio'
 custom_log_output = StringIO.new
 
-InboundHttpLogger.with_configuration(
+InboundHTTPLogger.with_configuration(
   logger_factory: -> { Logger.new(custom_log_output) }
 ) do
-  logger = InboundHttpLogger.configuration.logger
+  logger = InboundHTTPLogger.configuration.logger
   logger.info("This goes to the custom logger")
   puts "Custom logger output: #{custom_log_output.string.strip}"
 end
@@ -97,17 +97,17 @@ puts "=== Configuration Backup/Restore Example ==="
 puts
 
 # Demonstrate the backup/restore functionality
-original_enabled = InboundHttpLogger.configuration.enabled?
+original_enabled = InboundHTTPLogger.configuration.enabled?
 puts "Original enabled: #{original_enabled}"
 
 # Change configuration
-InboundHttpLogger.configure { |config| config.enabled = !original_enabled }
-puts "After change: #{InboundHttpLogger.configuration.enabled?}"
+InboundHTTPLogger.configure { |config| config.enabled = !original_enabled }
+puts "After change: #{InboundHTTPLogger.configuration.enabled?}"
 
 # Create backup and restore
-backup = InboundHttpLogger.global_configuration.backup
-InboundHttpLogger.global_configuration.restore(backup)
-puts "After restore: #{InboundHttpLogger.configuration.enabled?}"
+backup = InboundHTTPLogger.global_configuration.backup
+InboundHTTPLogger.global_configuration.restore(backup)
+puts "After restore: #{InboundHTTPLogger.configuration.enabled?}"
 
 puts
 puts "=== Example Complete ==="

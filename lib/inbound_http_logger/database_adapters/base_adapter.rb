@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module InboundHttpLogger
+module InboundHTTPLogger
   module DatabaseAdapters
     # Base adapter for database-specific logging implementations
     class BaseAdapter
@@ -29,7 +29,7 @@ module InboundHttpLogger
           ensure_connection_and_table
           model_class.count
         rescue StandardError => e
-          InboundHttpLogger.configuration.logger.error("Error counting logs in #{adapter_name}: #{e.class}: #{e.message}")
+          InboundHTTPLogger.configuration.logger.error("Error counting logs in #{adapter_name}: #{e.class}: #{e.message}")
           0
         end
       end
@@ -42,7 +42,7 @@ module InboundHttpLogger
           ensure_connection_and_table
           model_class.where(status_code: status).count
         rescue StandardError => e
-          InboundHttpLogger.configuration.logger.error("Error counting logs with status in #{adapter_name}: #{e.class}: #{e.message}")
+          InboundHTTPLogger.configuration.logger.error("Error counting logs with status in #{adapter_name}: #{e.class}: #{e.message}")
           0
         end
       end
@@ -55,7 +55,7 @@ module InboundHttpLogger
           ensure_connection_and_table
           model_class.where('url LIKE ?', "%#{path}%").count
         rescue StandardError => e
-          InboundHttpLogger.configuration.logger.error("Error counting logs for path in #{adapter_name}: #{e.class}: #{e.message}")
+          InboundHTTPLogger.configuration.logger.error("Error counting logs for path in #{adapter_name}: #{e.class}: #{e.message}")
           0
         end
       end
@@ -68,7 +68,7 @@ module InboundHttpLogger
           ensure_connection_and_table
           model_class.delete_all
         rescue StandardError => e
-          InboundHttpLogger.configuration.logger.error("Error clearing logs in #{adapter_name}: #{e.class}: #{e.message}")
+          InboundHTTPLogger.configuration.logger.error("Error clearing logs in #{adapter_name}: #{e.class}: #{e.message}")
         end
       end
 
@@ -80,7 +80,7 @@ module InboundHttpLogger
           ensure_connection_and_table
           model_class.order(created_at: :desc).limit(1000) # Reasonable limit
         rescue StandardError => e
-          InboundHttpLogger.configuration.logger.error("Error fetching logs from #{adapter_name}: #{e.class}: #{e.message}")
+          InboundHTTPLogger.configuration.logger.error("Error fetching logs from #{adapter_name}: #{e.class}: #{e.message}")
           []
         end
       end
@@ -88,7 +88,7 @@ module InboundHttpLogger
       # Log a request to the database
       def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
         return nil unless enabled?
-        return nil unless InboundHttpLogger.configuration.should_log_path?(request&.path)
+        return nil unless InboundHTTPLogger.configuration.should_log_path?(request&.path)
 
         begin
           ensure_connection_and_table
@@ -96,7 +96,7 @@ module InboundHttpLogger
           # Use the model class directly - it will use the correct connection
           model_class.log_request(request, request_body, status, headers, response_body, duration_seconds, options)
         rescue StandardError => e
-          InboundHttpLogger.configuration.logger.error("Error logging request in #{adapter_name}: #{e.class}: #{e.message}")
+          InboundHTTPLogger.configuration.logger.error("Error logging request in #{adapter_name}: #{e.class}: #{e.message}")
           nil
         end
       end

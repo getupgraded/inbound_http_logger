@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module InboundHttpLogger
+module InboundHTTPLogger
   class Configuration
     attr_accessor :enabled, :debug_logging, :max_body_size, :log_level, :secondary_database_url,
                   :secondary_database_adapter, :logger_factory, :cache_adapter

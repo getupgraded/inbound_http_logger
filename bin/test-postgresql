@@ -52,7 +52,7 @@ require 'inbound_http_logger/database_adapters/postgresql_adapter'
 
 begin
   # Test PostgreSQL adapter
-  adapter = InboundHttpLogger::DatabaseAdapters::PostgresqlAdapter.new(database_url, :test_pg)
+  adapter = InboundHTTPLogger::DatabaseAdapters::PostgresqlAdapter.new(database_url, :test_pg)
   model_class = adapter.send(:create_model_class)
 
   puts "✅ PostgreSQL adapter model class created"

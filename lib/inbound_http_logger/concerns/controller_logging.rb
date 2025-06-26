@@ -2,7 +2,7 @@
 
 require 'active_support/concern'
 
-module InboundHttpLogger
+module InboundHTTPLogger
   module Concerns
     module ControllerLogging
       extend ActiveSupport::Concern
@@ -80,13 +80,13 @@ module InboundHttpLogger
 
       # Set a loggable object for this request
       def set_inbound_log_loggable(object)
-        InboundHttpLogger.set_loggable(object)
+        InboundHTTPLogger.set_loggable(object)
       end
 
       # Add custom metadata to the current request log
       def add_inbound_log_metadata(metadata)
         current_metadata = Thread.current[:inbound_http_logger_metadata] || {}
-        InboundHttpLogger.set_metadata(current_metadata.merge(metadata))
+        InboundHTTPLogger.set_metadata(current_metadata.merge(metadata))
       end
 
       # Log a custom event within the request context
@@ -109,7 +109,7 @@ module InboundHttpLogger
 
         # Check if we should log this request
         def should_log_inbound_request?
-          InboundHttpLogger.enabled_for?(controller_name, action_name)
+          InboundHTTPLogger.enabled_for?(controller_name, action_name)
         end
 
         # Set up logging metadata before action
@@ -124,7 +124,7 @@ module InboundHttpLogger
           add_session_metadata(metadata)
 
           # Set the metadata for this request
-          InboundHttpLogger.set_metadata(metadata)
+          InboundHTTPLogger.set_metadata(metadata)
 
           # Execute custom context callback if defined
           execute_context_callback
@@ -171,7 +171,7 @@ module InboundHttpLogger
           end
 
           # Apply any metadata or loggable set by the callback
-          InboundHttpLogger.set_loggable(log_context.loggable) if log_context.loggable
+          InboundHTTPLogger.set_loggable(log_context.loggable) if log_context.loggable
           add_inbound_log_metadata(log_context.metadata) if log_context.metadata.any?
         end
 

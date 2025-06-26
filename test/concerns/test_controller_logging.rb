@@ -2,12 +2,12 @@
 
 require 'test_helper'
 
-describe InboundHttpLogger::Concerns::ControllerLogging do
+describe InboundHTTPLogger::Concerns::ControllerLogging do
   before do
     # Clear thread-local data before each test
     Thread.current[:inbound_http_logger_metadata] = nil
     Thread.current[:inbound_http_logger_loggable] = nil
-    InboundHttpLogger.enable!
+    InboundHTTPLogger.enable!
   end
 
   # Create a mock controller base class that provides Rails controller methods
@@ -28,13 +28,13 @@ describe InboundHttpLogger::Concerns::ControllerLogging do
   describe 'module methods' do
     it 'can set and get metadata' do
       metadata = { test: 'value' }
-      InboundHttpLogger.set_metadata(metadata)
+      InboundHTTPLogger.set_metadata(metadata)
       _(Thread.current[:inbound_http_logger_metadata]).must_equal metadata
     end
 
     it 'can set and get loggable' do
       object = Object.new
-      InboundHttpLogger.set_loggable(object)
+      InboundHTTPLogger.set_loggable(object)
       _(Thread.current[:inbound_http_logger_loggable]).must_equal object
     end
   end
@@ -82,7 +82,7 @@ describe InboundHttpLogger::Concerns::ControllerLogging do
       end
 
       # Include the concern methods
-      controller.extend(InboundHttpLogger::Concerns::ControllerLogging)
+      controller.extend(InboundHTTPLogger::Concerns::ControllerLogging)
 
       controller
     end
@@ -126,7 +126,7 @@ describe InboundHttpLogger::Concerns::ControllerLogging do
   describe 'log_requests method' do
     let(:mock_controller_class) do
       Class.new(controller_base_class) do
-        include InboundHttpLogger::Concerns::ControllerLogging
+        include InboundHTTPLogger::Concerns::ControllerLogging
       end
     end
 
@@ -165,7 +165,7 @@ describe InboundHttpLogger::Concerns::ControllerLogging do
   describe 'inheritance behavior' do
     let(:base_controller_class) do
       Class.new(controller_base_class) do
-        include InboundHttpLogger::Concerns::ControllerLogging
+        include InboundHTTPLogger::Concerns::ControllerLogging
       end
     end
 
@@ -230,7 +230,7 @@ describe InboundHttpLogger::Concerns::ControllerLogging do
   describe 'context callbacks' do
     let(:controller_class_with_callback) do
       Class.new(controller_base_class) do
-        include InboundHttpLogger::Concerns::ControllerLogging
+        include InboundHTTPLogger::Concerns::ControllerLogging
 
         attr_accessor :controller_name, :action_name, :request, :session, :test_resource
 
@@ -326,12 +326,12 @@ describe InboundHttpLogger::Concerns::ControllerLogging do
   describe 'inheritance chain callback lookup' do
     before do
       # Clear any existing callbacks before each test
-      InboundHttpLogger::Concerns::ControllerLogging.send(:class_variable_set, :@@context_callbacks, {})
+      InboundHTTPLogger::Concerns::ControllerLogging.send(:class_variable_set, :@@context_callbacks, {})
     end
 
     let(:base_controller_class) do
       Class.new(controller_base_class) do
-        include InboundHttpLogger::Concerns::ControllerLogging
+        include InboundHTTPLogger::Concerns::ControllerLogging
       end
     end
 

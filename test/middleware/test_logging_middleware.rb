@@ -2,13 +2,13 @@
 
 require 'test_helper'
 
-describe InboundHttpLogger::Middleware::LoggingMiddleware do
+describe InboundHTTPLogger::Middleware::LoggingMiddleware do
   let(:app) { ->(_env) { [200, { 'Content-Type' => 'application/json' }, ['{"success": true}']] } }
-  let(:middleware) { InboundHttpLogger::Middleware::LoggingMiddleware.new(app) }
+  let(:middleware) { InboundHTTPLogger::Middleware::LoggingMiddleware.new(app) }
 
   describe 'when logging is enabled' do
     before do
-      InboundHttpLogger.enable!
+      InboundHTTPLogger.enable!
     end
 
     it 'logs successful requests' do
@@ -64,7 +64,7 @@ describe InboundHttpLogger::Middleware::LoggingMiddleware do
 
     it 'logs failed requests' do
       error_app = ->(_env) { [500, { 'Content-Type' => 'application/json' }, ['{"error": "Internal Server Error"}']] }
-      error_middleware = InboundHttpLogger::Middleware::LoggingMiddleware.new(error_app)
+      error_middleware = InboundHTTPLogger::Middleware::LoggingMiddleware.new(error_app)
 
       env = Rack::MockRequest.env_for('/error', method: 'GET')
 
@@ -87,7 +87,7 @@ describe InboundHttpLogger::Middleware::LoggingMiddleware do
 
     it 'skips excluded content types' do
       html_app = ->(_env) { [200, { 'Content-Type' => 'text/html' }, ['<html></html>']] }
-      html_middleware = InboundHttpLogger::Middleware::LoggingMiddleware.new(html_app)
+      html_middleware = InboundHTTPLogger::Middleware::LoggingMiddleware.new(html_app)
 
       env = Rack::MockRequest.env_for('/page', method: 'GET')
 
@@ -98,7 +98,7 @@ describe InboundHttpLogger::Middleware::LoggingMiddleware do
     end
 
     it 'handles large request bodies' do
-      large_body = 'x' * (InboundHttpLogger.configuration.max_body_size + 1000)
+      large_body = 'x' * (InboundHTTPLogger.configuration.max_body_size + 1000)
       env = Rack::MockRequest.env_for('/large',
                                       method: 'POST',
                                       input: large_body,
@@ -114,7 +114,7 @@ describe InboundHttpLogger::Middleware::LoggingMiddleware do
     end
 
     it 'includes metadata from thread-local storage' do
-      InboundHttpLogger.set_metadata({ user_id: 123, action: 'test' })
+      InboundHTTPLogger.set_metadata({ user_id: 123, action: 'test' })
 
       env = Rack::MockRequest.env_for('/users', method: 'GET')
 
@@ -143,7 +143,7 @@ describe InboundHttpLogger::Middleware::LoggingMiddleware do
 
     it 'handles middleware errors gracefully' do
       # Mock the log_request method to raise an error
-      InboundHttpLogger::Models::InboundRequestLog.stubs(:log_request).raises(StandardError, 'Database error')
+      InboundHTTPLogger::Models::InboundRequestLog.stubs(:log_request).raises(StandardError, 'Database error')
 
       env = Rack::MockRequest.env_for('/users', method: 'GET')
 
@@ -156,8 +156,8 @@ describe InboundHttpLogger::Middleware::LoggingMiddleware do
     end
 
     it 'clears thread-local data after request' do
-      InboundHttpLogger.set_metadata({ user_id: 123 })
-      InboundHttpLogger.set_loggable(Object.new)
+      InboundHTTPLogger.set_metadata({ user_id: 123 })
+      InboundHTTPLogger.set_loggable(Object.new)
 
       env = Rack::MockRequest.env_for('/users', method: 'GET')
 
@@ -201,7 +201,7 @@ describe InboundHttpLogger::Middleware::LoggingMiddleware do
 
   describe 'when logging is disabled' do
     before do
-      InboundHttpLogger.disable!
+      InboundHTTPLogger.disable!
     end
 
     it 'does not log requests when disabled' do
@@ -229,7 +229,7 @@ describe InboundHttpLogger::Middleware::LoggingMiddleware do
 
   describe 'controller exclusions' do
     before do
-      InboundHttpLogger.enable!
+      InboundHTTPLogger.enable!
     end
 
     it 'skips excluded controllers' do
