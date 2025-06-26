@@ -12,24 +12,53 @@ end
 
 require_relative 'inbound_http_logger/version'
 require_relative 'inbound_http_logger/configuration'
-require_relative 'inbound_http_logger/models/base_request_log'
 require_relative 'inbound_http_logger/models/inbound_request_log'
 require_relative 'inbound_http_logger/middleware/logging_middleware'
 require_relative 'inbound_http_logger/concerns/controller_logging'
 require_relative 'inbound_http_logger/railtie' if defined?(Rails)
 
-module InboundHttpLogger
+module InboundHTTPLogger
   class Error < StandardError; end
 
+  @config_mutex = Mutex.new
+
   class << self
-    # Global configuration instance
+    # Configuration instance (checks for thread-local override first)
     def configuration
-      @configuration ||= Configuration.new
+      Thread.current[:inbound_http_logger_config_override] || global_configuration
+    end
+
+    # Global configuration instance (thread-safe)
+    def global_configuration
+      @config_mutex.synchronize do
+        @global_configuration ||= Configuration.new
+      end
     end
 
     # Configure the gem with a block
     def configure
       yield(configuration) if block_given?
+    end
+
+    # Thread-safe temporary configuration override for testing
+    def with_configuration(**overrides)
+      return yield if overrides.empty?
+
+      # Create a copy of the current configuration (which may already be an override)
+      current_config = configuration
+      backup = current_config.backup
+      temp_config = Configuration.new
+      temp_config.restore(backup)
+
+      # Apply overrides
+      overrides.each { |key, value| temp_config.public_send("#{key}=", value) }
+
+      # Set thread-local override
+      previous_override = Thread.current[:inbound_http_logger_config_override]
+      Thread.current[:inbound_http_logger_config_override] = temp_config
+      yield
+    ensure
+      Thread.current[:inbound_http_logger_config_override] = previous_override
     end
 
     # Enable logging (can be called without a block)
@@ -62,8 +91,9 @@ module InboundHttpLogger
       Thread.current[:inbound_http_logger_loggable] = loggable
     end
 
-    # Clear thread-local data
+    # Clear thread-local data (for test cleanup)
     def clear_thread_data
+      Thread.current[:inbound_http_logger_config_override] = nil
       Thread.current[:inbound_http_logger_metadata] = nil
       Thread.current[:inbound_http_logger_loggable] = nil
     end
@@ -84,6 +114,16 @@ module InboundHttpLogger
     # Check if secondary database logging is enabled
     def secondary_logging_enabled?
       configuration.secondary_database_enabled?
+    end
+
+    # Reset configuration to defaults (useful for testing)
+    # WARNING: This will lose all customizations from initializers
+    def reset_configuration!
+      @config_mutex.synchronize do
+        @global_configuration = nil
+      end
+      # Also clear any thread-local overrides
+      Thread.current[:inbound_http_logger_config_override] = nil
     end
 
     private

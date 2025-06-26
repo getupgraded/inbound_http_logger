@@ -9,11 +9,11 @@ require 'inbound_http_logger/generators/migration_generator'
 require 'tmpdir'
 require 'fileutils'
 
-describe InboundHttpLogger::Generators::MigrationGenerator do
+describe InboundHTTPLogger::Generators::MigrationGenerator do
   before do
     @tmp = Dir.mktmpdir
     FileUtils.mkdir_p(File.join(@tmp, 'db/migrate'))
-    InboundHttpLogger::Generators::MigrationGenerator.start([], destination_root: @tmp)
+    InboundHTTPLogger::Generators::MigrationGenerator.start([], destination_root: @tmp)
     @migration_path = Dir.glob(File.join(@tmp, 'db/migrate/*.rb')).first
     load @migration_path
     ActiveRecord::Migration.verbose = false
@@ -44,7 +44,7 @@ describe InboundHttpLogger::Generators::MigrationGenerator do
     _(index_names).must_include 'index_inbound_request_logs_on_response_body_gin' if connection.adapter_name == 'PostgreSQL'
 
     migration.migrate(:down)
-    assert_not connection.table_exists?(:inbound_request_logs)
+    refute connection.table_exists?(:inbound_request_logs)
   end
 
   it 'generates a migration that runs on SQLite' do
@@ -52,6 +52,18 @@ describe InboundHttpLogger::Generators::MigrationGenerator do
   end
 
   it 'generates a migration that runs on PostgreSQL' do
+    skip 'PostgreSQL test database not available' unless postgresql_test_database_available?
     run_migration(adapter: 'postgresql', database: 'inbound_test', username: 'postgres', password: 'postgres', host: 'localhost')
   end
+
+  private
+
+    def postgresql_test_database_available?
+      require 'pg'
+      # Try to connect to the specific test database
+      PG.connect(host: 'localhost', port: 5432, dbname: 'inbound_test', user: 'postgres', password: 'postgres').close
+      true
+    rescue LoadError, PG::Error, StandardError
+      false
+    end
 end
