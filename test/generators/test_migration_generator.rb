@@ -44,7 +44,7 @@ describe InboundHTTPLogger::Generators::MigrationGenerator do
     _(index_names).must_include 'index_inbound_request_logs_on_response_body_gin' if connection.adapter_name == 'PostgreSQL'
 
     migration.migrate(:down)
-    assert_not connection.table_exists?(:inbound_request_logs)
+    refute connection.table_exists?(:inbound_request_logs)
   end
 
   it 'generates a migration that runs on SQLite' do

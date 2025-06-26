@@ -20,15 +20,19 @@ require_relative 'inbound_http_logger/railtie' if defined?(Rails)
 module InboundHTTPLogger
   class Error < StandardError; end
 
+  @config_mutex = Mutex.new
+
   class << self
     # Configuration instance (checks for thread-local override first)
     def configuration
       Thread.current[:inbound_http_logger_config_override] || global_configuration
     end
 
-    # Global configuration instance
+    # Global configuration instance (thread-safe)
     def global_configuration
-      @global_configuration ||= Configuration.new
+      @config_mutex.synchronize do
+        @global_configuration ||= Configuration.new
+      end
     end
 
     # Configure the gem with a block
@@ -87,8 +91,9 @@ module InboundHTTPLogger
       Thread.current[:inbound_http_logger_loggable] = loggable
     end
 
-    # Clear thread-local data
+    # Clear thread-local data (for test cleanup)
     def clear_thread_data
+      Thread.current[:inbound_http_logger_config_override] = nil
       Thread.current[:inbound_http_logger_metadata] = nil
       Thread.current[:inbound_http_logger_loggable] = nil
     end
@@ -114,18 +119,10 @@ module InboundHTTPLogger
     # Reset configuration to defaults (useful for testing)
     # WARNING: This will lose all customizations from initializers
     def reset_configuration!
-      @configuration = nil
+      @config_mutex.synchronize do
+        @global_configuration = nil
+      end
       # Also clear any thread-local overrides
-      Thread.current[:inbound_http_logger_config_override] = nil
-    end
-
-    # Create a new configuration instance with defaults
-    def create_fresh_configuration
-      Configuration.new
-    end
-
-    # Clear thread-local configuration override
-    def clear_configuration_override
       Thread.current[:inbound_http_logger_config_override] = nil
     end
 

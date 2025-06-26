@@ -65,38 +65,20 @@ ActiveRecord::Schema.define do
   end
 end
 
-# JSON columns are automatically handled in Rails 8.0+
-
 # Configure the gem to use the default connection in tests
 # This ensures all tests use the same in-memory database with the table
-module InboundHTTPLogger
-  module Test
-    def self.configure(adapter:, connection_string: nil)
-      # In test mode, explicitly configure the gem to use the default connection
-      # This ensures all tests use the same in-memory database with the table
-      case adapter
-      when :sqlite
-        InboundHTTPLogger.configure do |config|
-          config.enabled = true
-          config.adapter = :sqlite
-          # Don't set database_url - this will make the adapter use the default connection
-          config.database_url = nil
-        end
-      when :postgresql
-        InboundHTTPLogger.configure do |config|
-          config.enabled = true
-          config.adapter = :postgresql
-          # Don't set database_url - this will make the adapter use the default connection
-          config.database_url = nil
-        end
-      end
-    end
-  end
-end
+# Note: The actual InboundHTTPLogger::Test.configure method now handles
+# enabling the main configuration automatically
 
 # Test helper methods for gem internal tests
 module TestHelpers
   def setup
+    # Ensure table exists (for tests that might run in isolation)
+    ensure_test_table_exists!
+
+    # Reset configuration to defaults
+    InboundHTTPLogger.reset_configuration!
+
     # Reset database adapter cache
     InboundHTTPLogger::Models::InboundRequestLog.reset_adapter_cache!
 
@@ -198,6 +180,9 @@ module TestHelpers
     # Clear all logs (only if table exists)
     InboundHTTPLogger::Models::InboundRequestLog.delete_all if ActiveRecord::Base.connection.table_exists?(:inbound_request_logs)
 
+    # Enable logging by default for tests (individual tests can disable if needed)
+    InboundHTTPLogger.enable!
+
     # Reset WebMock
     WebMock.reset!
     WebMock.disable_net_connect!
@@ -220,8 +205,13 @@ module TestHelpers
     InboundHTTPLogger.disable!
 
     # Clear thread-local data (use comprehensive cleanup in teardown)
-    InboundHTTPLogger.clear_all_thread_data
+    InboundHTTPLogger.clear_thread_data
   end
+
+  # Minitest::Spec style aliases for before/after blocks
+  # These ensure compatibility with both Test::Unit and Spec styles
+  alias before setup
+  alias after teardown
 
   def with_logging_enabled
     InboundHTTPLogger.enable!
@@ -273,8 +263,78 @@ module TestHelpers
 
     Rack::Request.new(env)
   end
+
+  private
+
+    def ensure_test_table_exists!
+      return if ActiveRecord::Base.connection.table_exists?(:inbound_request_logs)
+
+      # Create the table if it doesn't exist
+      ActiveRecord::Schema.define do
+        create_table :inbound_request_logs do |t|
+          # Request information
+          t.string :request_id, index: true
+          t.string :http_method, null: false
+          t.text :url, null: false
+          t.string :ip_address
+          t.string :user_agent
+          t.string :referrer
+
+          # Request details
+          t.json :request_headers, default: {}
+          t.json :request_body
+
+          # Response details
+          t.integer :status_code, null: false
+          t.json :response_headers, default: {}
+          t.json :response_body
+
+          # Performance metrics
+          t.decimal :duration_seconds, precision: 10, scale: 6
+          t.decimal :duration_ms, precision: 10, scale: 2
+
+          # Polymorphic association
+          t.references :loggable, polymorphic: true, type: :bigint
+
+          # Metadata and timestamps
+          t.json :metadata, default: {}
+          t.timestamps
+
+          # Indexes for common queries
+          t.index :http_method
+          t.index :status_code
+          t.index :created_at
+          t.index :ip_address
+          t.index :duration_ms
+
+          # Add a partial index for failed requests
+          t.index :status_code, where: 'status_code >= 400', name: 'index_inbound_request_logs_on_failed_requests'
+        end
+      end
+    end
 end
 
 # Include test helpers in all test classes
 Minitest::Test.include(TestHelpers)
 Minitest::Spec.include(TestHelpers)
+
+# Check for leftover thread-local data and raise descriptive errors
+# This helps identify tests that don't clean up properly
+def assert_no_leftover_thread_data!
+  leftover_data = {}
+
+  # Check all known InboundHTTPLogger thread-local variables
+  thread_vars = {
+    inbound_http_logger_config_override: Thread.current[:inbound_http_logger_config_override],
+    inbound_http_logger_metadata: Thread.current[:inbound_http_logger_metadata],
+    inbound_http_logger_loggable: Thread.current[:inbound_http_logger_loggable]
+  }
+
+  thread_vars.each do |key, value|
+    leftover_data[key] = value unless value.nil?
+  end
+
+  return if leftover_data.empty?
+
+  raise "Thread-local data not cleaned up: #{leftover_data.keys.join(', ')}"
+end

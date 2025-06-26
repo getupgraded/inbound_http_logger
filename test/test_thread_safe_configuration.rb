@@ -34,8 +34,8 @@ class TestThreadSafeConfiguration < Minitest::Test
     # Verify thread isolation
     assert results[0][:enabled], 'Thread 0 should have enabled: true'
     assert results[0][:debug_logging], 'Thread 0 should have debug_logging: true'
-    assert_not results[1][:enabled], 'Thread 1 should have enabled: false'
-    assert_not results[1][:debug_logging], 'Thread 1 should have debug_logging: false'
+    refute results[1][:enabled], 'Thread 1 should have enabled: false'
+    refute results[1][:debug_logging], 'Thread 1 should have debug_logging: false'
   end
 
   def test_configuration_backup_and_restore
