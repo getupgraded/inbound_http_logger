@@ -10,7 +10,9 @@ module InboundHTTPLogger
       end
 
       def call(env)
-        return @app.call(env) unless should_log_request?(env)
+        # Get configuration once and reuse throughout the request
+        config = InboundHTTPLogger.configuration
+        return @app.call(env) unless should_log_request?(env, config)
 
         # Capture start time for duration calculation
         start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -23,10 +25,10 @@ module InboundHTTPLogger
         status, headers, response = @app.call(env)
 
         # Check if we should log based on response content type
-        return [status, headers, response] unless should_log_response?(request, status, headers)
+        return [status, headers, response] unless should_log_response?(request, status, headers, config)
 
         # Capture response body if needed
-        response_body = (read_response_body(response) if should_capture_response_body?(request, status, headers))
+        response_body = (read_response_body(response) if should_capture_response_body?(request, status, headers, config))
 
         # Calculate duration
         end_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -34,19 +36,25 @@ module InboundHTTPLogger
 
         # Log the request and response (with error handling)
         begin
-          log_request(request, request_body, status, headers, response_body, duration_seconds)
+          log_request(request, request_body, status, headers, response_body, duration_seconds, config)
         rescue StandardError => e
           # Log the error but don't let it affect the application
-          InboundHTTPLogger.configuration.logger.error("Error logging inbound request: #{e.class}: #{e.message}")
-          InboundHTTPLogger.configuration.logger.error(e.backtrace.join("\n")) if InboundHTTPLogger.configuration.debug_logging
+          config.logger.error("Error logging inbound request: #{e.class}: #{e.message}")
+          config.logger.error(e.backtrace.join("\n")) if config.debug_logging
         end
 
         # Return the response
         [status, headers, response]
       rescue StandardError => e
         # Log the error but don't let it affect the application
-        InboundHTTPLogger.configuration.logger.error("Error in InboundHTTPLogger::LoggingMiddleware: #{e.class}: #{e.message}")
-        InboundHTTPLogger.configuration.logger.error(e.backtrace.join("\n")) if InboundHTTPLogger.configuration.debug_logging
+        # Use a fresh config reference in case the error was related to config access
+        begin
+          logger = InboundHTTPLogger.configuration.logger
+          logger.error("Error in InboundHTTPLogger::LoggingMiddleware: #{e.class}: #{e.message}")
+          logger.error(e.backtrace.join("\n")) if InboundHTTPLogger.configuration.debug_logging
+        rescue StandardError
+          # If even logging fails, silently continue to avoid breaking the application
+        end
 
         # Re-raise to allow other error handlers to process it
         raise e
@@ -58,34 +66,34 @@ module InboundHTTPLogger
       private
 
         # Check if we should log this request (basic checks)
-        def should_log_request?(env)
-          return false unless InboundHTTPLogger.enabled?
+        def should_log_request?(env, config = InboundHTTPLogger.configuration)
+          return false unless config.enabled?
 
           request = Rack::Request.new(env)
-          return false unless InboundHTTPLogger.configuration.should_log_path?(request.path)
+          return false unless config.should_log_path?(request.path)
 
           # Check controller-level exclusions if available
           if env['action_controller.instance']
             controller = env['action_controller.instance']
-            return false unless InboundHTTPLogger.enabled_for?(controller.controller_name, controller.action_name)
+            return false unless config.enabled_for_controller?(controller.controller_name, controller.action_name)
           end
 
           true
         end
 
         # Check if we should log based on response
-        def should_log_response?(_request, _status, headers)
+        def should_log_response?(_request, _status, headers, config = InboundHTTPLogger.configuration)
           content_type = headers['Content-Type']&.split(';')&.first
-          InboundHTTPLogger.configuration.should_log_content_type?(content_type)
+          config.should_log_content_type?(content_type)
         end
 
         # Check if we should capture response body
-        def should_capture_response_body?(_request, status, headers)
+        def should_capture_response_body?(_request, status, headers, config = InboundHTTPLogger.configuration)
           return false if status == 204 # No Content
           return false if status >= 300 && status < 400 # Redirects typically don't have meaningful bodies
 
           content_type = headers['Content-Type']&.split(';')&.first
-          InboundHTTPLogger.configuration.should_log_content_type?(content_type)
+          config.should_log_content_type?(content_type)
         end
 
         # Read and parse request body
@@ -145,7 +153,7 @@ module InboundHTTPLogger
         end
 
         # Log the request
-        def log_request(request, request_body, status, headers, response_body, duration_seconds)
+        def log_request(request, request_body, status, headers, response_body, duration_seconds, config = InboundHTTPLogger.configuration)
           # Log to main database
           InboundHTTPLogger::Models::InboundRequestLog.log_request(
             request,
@@ -157,8 +165,8 @@ module InboundHTTPLogger
           )
 
           # Also log to secondary database if enabled
-          if InboundHTTPLogger.configuration.secondary_database_enabled?
-            adapter = InboundHTTPLogger.configuration.secondary_database_adapter_instance
+          if config.secondary_database_enabled?
+            adapter = config.secondary_database_adapter_instance
             adapter&.log_request(request, request_body, status, headers, response_body, duration_seconds)
           end
 

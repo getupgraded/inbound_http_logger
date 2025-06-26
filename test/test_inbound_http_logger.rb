@@ -9,6 +9,8 @@ describe InboundHTTPLogger do
 
   describe 'configuration' do
     it 'starts disabled by default' do
+      # Reset to default state (disabled)
+      InboundHTTPLogger.disable!
       _(InboundHTTPLogger.enabled?).must_equal false
     end
 
