@@ -1,3 +1,6 @@
+# Prevent inheriting from parent directory configs
+inherit_from: []
+
 plugins:
 - rubocop-rails
 - rubocop-thread_safety
@@ -28,6 +31,10 @@ AllCops:
 # Gem-specific overrides
 Rails/ApplicationRecord:
   Enabled: false
+
+Rails/RefuteMethods:
+  Enabled: true
+  EnforcedStyle: refute
 
 Style/Documentation:
   Enabled: false

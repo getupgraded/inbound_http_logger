@@ -8,6 +8,7 @@ module InboundHTTPLogger
                 :excluded_controllers, :excluded_actions
 
     def initialize
+      @mutex = Mutex.new
       @enabled = false
       @debug_logging = false
       @max_body_size = 10_000 # 10KB default
@@ -228,46 +229,50 @@ module InboundHTTPLogger
       @secondary_database_adapter_instance = nil # Reset cached adapter
     end
 
-    # Create a backup of the current configuration state
+    # Create a backup of the current configuration state (thread-safe)
     def backup
-      {
-        enabled: @enabled,
-        debug_logging: @debug_logging,
-        max_body_size: @max_body_size,
-        log_level: @log_level,
-        secondary_database_url: @secondary_database_url,
-        secondary_database_adapter: @secondary_database_adapter,
-        logger_factory: @logger_factory,
-        cache_adapter: @cache_adapter,
-        excluded_paths: @excluded_paths.dup,
-        excluded_content_types: @excluded_content_types.dup,
-        sensitive_headers: @sensitive_headers.dup,
-        sensitive_body_keys: @sensitive_body_keys.dup,
-        excluded_controllers: @excluded_controllers.dup,
-        excluded_actions: @excluded_actions.dup
-      }
+      @mutex.synchronize do
+        {
+          enabled: @enabled,
+          debug_logging: @debug_logging,
+          max_body_size: @max_body_size,
+          log_level: @log_level,
+          secondary_database_url: @secondary_database_url,
+          secondary_database_adapter: @secondary_database_adapter,
+          logger_factory: @logger_factory,
+          cache_adapter: @cache_adapter,
+          excluded_paths: @excluded_paths.dup,
+          excluded_content_types: @excluded_content_types.dup,
+          sensitive_headers: @sensitive_headers.dup,
+          sensitive_body_keys: @sensitive_body_keys.dup,
+          excluded_controllers: @excluded_controllers.dup,
+          excluded_actions: @excluded_actions.dup
+        }
+      end
     end
 
-    # Restore configuration from a backup
+    # Restore configuration from a backup (thread-safe)
     def restore(backup)
-      @enabled = backup[:enabled]
-      @debug_logging = backup[:debug_logging]
-      @max_body_size = backup[:max_body_size]
-      @log_level = backup[:log_level]
-      @secondary_database_url = backup[:secondary_database_url]
-      @secondary_database_adapter = backup[:secondary_database_adapter]
-      @logger_factory = backup[:logger_factory]
-      @cache_adapter = backup[:cache_adapter]
-      @excluded_paths = backup[:excluded_paths]
-      @excluded_content_types = backup[:excluded_content_types]
-      @sensitive_headers = backup[:sensitive_headers]
-      @sensitive_body_keys = backup[:sensitive_body_keys]
-      @excluded_controllers = backup[:excluded_controllers]
-      @excluded_actions = backup[:excluded_actions]
+      @mutex.synchronize do
+        @enabled = backup[:enabled]
+        @debug_logging = backup[:debug_logging]
+        @max_body_size = backup[:max_body_size]
+        @log_level = backup[:log_level]
+        @secondary_database_url = backup[:secondary_database_url]
+        @secondary_database_adapter = backup[:secondary_database_adapter]
+        @logger_factory = backup[:logger_factory]
+        @cache_adapter = backup[:cache_adapter]
+        @excluded_paths = backup[:excluded_paths]
+        @excluded_content_types = backup[:excluded_content_types]
+        @sensitive_headers = backup[:sensitive_headers]
+        @sensitive_body_keys = backup[:sensitive_body_keys]
+        @excluded_controllers = backup[:excluded_controllers]
+        @excluded_actions = backup[:excluded_actions]
 
-      # Reset cached instances
-      @logger = nil
-      @secondary_database_adapter_instance = nil
+        # Reset cached instances
+        @logger = nil
+        @secondary_database_adapter_instance = nil
+      end
     end
 
     private

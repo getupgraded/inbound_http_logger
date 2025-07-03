@@ -8,6 +8,9 @@ module InboundHTTPLogger
       def configure(database_url: nil, adapter: :sqlite)
         @test_adapter = create_adapter(database_url, adapter)
         @test_adapter&.establish_connection
+
+        # Enable main configuration for test logging to work
+        InboundHTTPLogger.enable!
       end
 
       # Enable test logging
@@ -205,50 +208,6 @@ module InboundHTTPLogger
         yield
       ensure
         restore_inbound_http_logger_configuration(backup)
-      end
-
-      # Setup test with isolated configuration (recommended for most tests)
-      def setup_inbound_http_logger_test_with_isolation(database_url: nil, adapter: :sqlite, **config_options)
-        # Backup original configuration
-        @inbound_http_logger_config_backup = backup_inbound_http_logger_configuration
-
-        # Setup test logging
-        setup_inbound_http_logger_test(database_url: database_url, adapter: adapter)
-
-        # Apply configuration options if provided
-        return if config_options.empty?
-
-        InboundHTTPLogger.configure do |config|
-          config_options.each do |key, value|
-            case key
-            when :enabled
-              config.enabled = value
-            when :debug_logging
-              config.debug_logging = value
-            when :max_body_size
-              config.max_body_size = value
-            when :clear_excluded_paths
-              config.excluded_paths.clear if value
-            when :clear_excluded_content_types
-              config.excluded_content_types.clear if value
-            when :excluded_paths
-              Array(value).each { |path| config.excluded_paths << path }
-            when :excluded_content_types
-              Array(value).each { |type| config.excluded_content_types << type }
-            end
-          end
-        end
-      end
-
-      # Teardown test with configuration restoration
-      def teardown_inbound_http_logger_test_with_isolation
-        teardown_inbound_http_logger_test
-
-        # Restore original configuration if backup exists
-        return unless @inbound_http_logger_config_backup
-
-        restore_inbound_http_logger_configuration(@inbound_http_logger_config_backup)
-        @inbound_http_logger_config_backup = nil
       end
 
       # Assert request was logged
