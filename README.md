@@ -241,22 +241,26 @@ InboundHTTPLogger::Test.reset!
 
 #### Recommended Test Setup Patterns
 
-**Option 1: Configuration Isolation (Recommended)**
+**Option 1: Thread-Safe Configuration (Recommended)**
 ```ruby
 describe "My Feature" do
   include InboundHTTPLogger::Test::Helpers
 
-  before do
-    setup_inbound_http_logger_test_with_isolation(
-      database_url: 'sqlite3:///tmp/test_requests.sqlite3',
+  it "logs requests with thread-safe configuration" do
+    # Uses thread-safe configuration with in-memory SQLite for true isolation
+    InboundHTTPLogger.with_configuration(
       enabled: true,
+      secondary_database_url: 'sqlite3::memory:',
+      secondary_database_adapter: :sqlite,
       clear_excluded_paths: true,
       clear_excluded_content_types: true
-    )
-  end
-
-  after do
-    teardown_inbound_http_logger_test_with_isolation
+    ) do
+      # Configuration changes only affect current thread
+      # Safe for parallel test execution
+      get '/some/path'
+      assert_request_logged('GET', '/some/path')
+    end
+    # Configuration automatically restored after block
   end
 end
 ```
@@ -284,16 +288,18 @@ describe "My Feature" do
 end
 ```
 
-**Option 3: Thread-Safe Configuration (Recommended for Parallel Testing)**
+**Option 3: Legacy Configuration Block (Not Recommended)**
 ```ruby
 describe "My Feature" do
   include InboundHTTPLogger::Test::Helpers
 
-  it "logs requests with thread-safe configuration" do
-    # Uses the new simplified thread-safe configuration system
-    with_thread_safe_configuration(enabled: true, debug_logging: true) do
-      # Configuration changes only affect current thread
-      # Safe for parallel test execution
+  it "logs requests with configuration block" do
+    # Legacy approach - use Option 1 instead for better thread safety
+    with_inbound_http_logger_configuration(
+      enabled: true,
+      clear_excluded_paths: true,
+      clear_excluded_content_types: true
+    ) do
       get '/some/path'
       assert_request_logged('GET', '/some/path')
     end
@@ -334,15 +340,17 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   include InboundHTTPLogger::Test::Helpers
 
   setup do
-    # Use isolated setup to avoid configuration pollution
-    setup_inbound_http_logger_test_with_isolation(
-      database_url: 'sqlite3:///tmp/system_test_requests.sqlite3',
-      enabled: true  # Enable for system tests
-    )
+    # Use thread-safe configuration for system tests
+    @inbound_http_logger_backup = InboundHTTPLogger.global_configuration.backup
+    InboundHTTPLogger.configure do |config|
+      config.enabled = true
+      config.secondary_database_url = 'sqlite3:///tmp/system_test_requests.sqlite3'
+      config.secondary_database_adapter = :sqlite
+    end
   end
 
   teardown do
-    teardown_inbound_http_logger_test_with_isolation
+    InboundHTTPLogger.global_configuration.restore(@inbound_http_logger_backup) if @inbound_http_logger_backup
   end
 end
 
@@ -371,13 +379,16 @@ class ActiveSupport::TestCase
   include InboundHTTPLogger::Test::Helpers
 
   setup do
-    setup_inbound_http_logger_test_with_isolation(
-      database_url: 'sqlite3:///tmp/test_requests.sqlite3'
-    )
+    @inbound_http_logger_backup = InboundHTTPLogger.global_configuration.backup
+    InboundHTTPLogger.configure do |config|
+      config.enabled = true
+      config.secondary_database_url = 'sqlite3:///tmp/test_requests.sqlite3'
+      config.secondary_database_adapter = :sqlite
+    end
   end
 
   teardown do
-    teardown_inbound_http_logger_test_with_isolation
+    InboundHTTPLogger.global_configuration.restore(@inbound_http_logger_backup) if @inbound_http_logger_backup
   end
 end
 
@@ -915,9 +926,8 @@ restore_inbound_http_logger_configuration(backup)
 with_inbound_http_logger_configuration(**options) { ... }
 with_thread_safe_configuration(**overrides) { ... }  # Recommended for parallel testing
 
-# Test Setup (Recommended)
-setup_inbound_http_logger_test_with_isolation(database_url:, adapter:, **config_options)
-teardown_inbound_http_logger_test_with_isolation
+# Thread-Safe Configuration (Recommended)
+InboundHTTPLogger.with_configuration(**overrides) { ... }
 
 # Test Setup (Basic)
 setup_inbound_http_logger_test(database_url:, adapter:)
@@ -942,18 +952,21 @@ before do
 end
 ```
 
-#### ✅ DO: Use Configuration Isolation
+#### ✅ DO: Use Thread-Safe Configuration
 ```ruby
-# This safely isolates configuration changes
-before do
-  setup_inbound_http_logger_test_with_isolation(
+# This safely isolates configuration changes per thread
+it "logs requests without exclusions" do
+  InboundHTTPLogger.with_configuration(
+    enabled: true,
+    secondary_database_url: 'sqlite3::memory:',
+    secondary_database_adapter: :sqlite,
     clear_excluded_paths: true,
     clear_excluded_content_types: true
-  )
-end
-
-after do
-  teardown_inbound_http_logger_test_with_isolation
+  ) do
+    get '/assets/app.css'
+    assert_request_logged('GET', '/assets/app.css')
+  end
+  # Configuration automatically restored
 end
 ```
 

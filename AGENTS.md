@@ -597,7 +597,13 @@ end
 
 # Thread-safe test setup
 def setup_with_isolation
-  setup_inbound_http_logger_test_with_isolation(enabled: true)
+  InboundHTTPLogger.with_configuration(
+    enabled: true,
+    secondary_database_url: 'sqlite3::memory:',
+    secondary_database_adapter: :sqlite
+  ) do
+    yield
+  end
 end
 ```
 

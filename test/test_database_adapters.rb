@@ -5,8 +5,10 @@ require 'inbound_http_logger/database_adapters/sqlite_adapter'
 require 'inbound_http_logger/database_adapters/postgresql_adapter'
 require 'inbound_http_logger/test'
 
-class TestDatabaseAdapters < Minitest::Test
-  include TestHelpers
+class TestDatabaseAdapters < InboundHTTPLoggerTestCase
+  # This test class has threading/concurrency issues with database adapters
+  # Disable parallelization to prevent flaky test failures
+  parallelize(workers: 0)
 
   def test_sqlite_adapter_creates_model_class_that_inherits_from_inbound_request_log
     adapter = InboundHTTPLogger::DatabaseAdapters::SqliteAdapter.new('sqlite3:///tmp/test.sqlite3', :test_sqlite)
@@ -71,44 +73,63 @@ class TestDatabaseAdapters < Minitest::Test
   end
 
   def test_sqlite_test_adapter_integration
-    InboundHTTPLogger::Test.configure(adapter: :sqlite)
-    InboundHTTPLogger::Test.enable!
-    InboundHTTPLogger::Test.clear_logs!
+    # Use thread-safe configuration with in-memory SQLite for true isolation
+    InboundHTTPLogger.with_configuration(
+      enabled: true,
+      secondary_database_url: 'sqlite3::memory:',
+      secondary_database_adapter: :sqlite
+    ) do
+      # Create a mock request
+      require 'rack'
+      env = Rack::MockRequest.env_for('/test', method: 'GET')
+      request = Rack::Request.new(env)
 
-    # Create a mock request
-    require 'rack'
-    env = Rack::MockRequest.env_for('/test', method: 'GET')
-    Rack::Request.new(env)
+      # Create a direct adapter instance for testing (avoiding global Test module state)
+      adapter = InboundHTTPLogger::DatabaseAdapters::SqliteAdapter.new('sqlite3::memory:', :test_sqlite_memory)
+      adapter.establish_connection
 
-    # Log a request directly using the test adapter
-    InboundHTTPLogger::Test.log_request(:get, '/test', {}, { status_code: 200 }, 0.1)
+      # Log a request directly using the adapter
+      adapter.log_request(request, nil, 200, {}, nil, 0.1)
 
-    # Test the all_calls method
-    calls = InboundHTTPLogger::Test.all_calls
-    assert_includes calls, 'GET /test'
+      # Test the formatted_call method through the adapter's model
+      logs = adapter.all_logs
+      calls = logs.map(&:formatted_call)
+      assert_includes calls, 'GET /test'
+    end
   end
 
   def test_postgresql_test_adapter_integration_when_available
     skip 'PostgreSQL not available' unless postgresql_available? && postgresql_test_database_available?
 
-    InboundHTTPLogger::Test.configure(
-      database_url: ENV['INBOUND_HTTP_LOGGER_TEST_DATABASE_URL'],
-      adapter: :postgresql
-    )
-    InboundHTTPLogger::Test.enable!
-    InboundHTTPLogger::Test.clear_logs!
+    # Use thread-safe configuration with dedicated test database for true isolation
+    InboundHTTPLogger.with_configuration(
+      enabled: true,
+      secondary_database_url: ENV['INBOUND_HTTP_LOGGER_TEST_DATABASE_URL'],
+      secondary_database_adapter: :postgresql
+    ) do
+      # Create a mock request
+      require 'rack'
+      env = Rack::MockRequest.env_for('/pg-test', method: 'POST')
+      request = Rack::Request.new(env)
 
-    # Create a mock request
-    require 'rack'
-    env = Rack::MockRequest.env_for('/pg-test', method: 'POST')
-    Rack::Request.new(env)
+      # Create a direct adapter instance for testing (avoiding global Test module state)
+      adapter = InboundHTTPLogger::DatabaseAdapters::PostgresqlAdapter.new(
+        ENV['INBOUND_HTTP_LOGGER_TEST_DATABASE_URL'],
+        :test_postgresql_memory
+      )
+      adapter.establish_connection
 
-    # Log a request directly using the test adapter
-    InboundHTTPLogger::Test.log_request(:post, '/pg-test', { body: '{"test": true}' }, { status_code: 201, body: '{"success": true}' }, 0.2)
+      # Clear any existing logs in the test database
+      adapter.clear_logs
 
-    # Test the all_calls method
-    calls = InboundHTTPLogger::Test.all_calls
-    assert_includes calls, 'POST /pg-test'
+      # Log a request directly using the adapter
+      adapter.log_request(request, '{"test": true}', 201, {}, '{"success": true}', 0.2)
+
+      # Test the formatted_call method through the adapter's model
+      logs = adapter.all_logs
+      calls = logs.map(&:formatted_call)
+      assert_includes calls, 'POST /pg-test'
+    end
   end
 
   private

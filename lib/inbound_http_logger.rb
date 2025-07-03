@@ -20,15 +20,24 @@ require_relative 'inbound_http_logger/railtie' if defined?(Rails)
 module InboundHTTPLogger
   class Error < StandardError; end
 
+  @config_mutex = Mutex.new
+
   class << self
-    # Configuration instance (checks for thread-local override first)
+    # Configuration instance (with thread-local override support)
     def configuration
-      Thread.current[:inbound_http_logger_config_override] || global_configuration
+      # Check for thread-local configuration override
+      override = Thread.current[:inbound_http_logger_config_override]
+      return override if override
+
+      # Fall back to global configuration
+      global_configuration
     end
 
-    # Global configuration instance
+    # Global configuration instance (thread-safe)
     def global_configuration
-      @global_configuration ||= Configuration.new
+      @config_mutex.synchronize do
+        @global_configuration ||= Configuration.new
+      end
     end
 
     # Configure the gem with a block
@@ -36,24 +45,30 @@ module InboundHTTPLogger
       yield(configuration) if block_given?
     end
 
-    # Thread-safe temporary configuration override for testing
+    # Thread-safe configuration override
     def with_configuration(**overrides)
       return yield if overrides.empty?
 
-      # Create a copy of the current configuration (which may already be an override)
+      # Create a copy of the current configuration (global or existing thread-local)
       current_config = configuration
+      override_config = current_config.class.new
+
+      # Use backup/restore to copy all settings
       backup = current_config.backup
-      temp_config = Configuration.new
-      temp_config.restore(backup)
+      override_config.restore(backup)
 
       # Apply overrides
-      overrides.each { |key, value| temp_config.public_send("#{key}=", value) }
+      overrides.each { |key, value| override_config.public_send("#{key}=", value) }
+
+      # Store previous thread-local override (if any)
+      previous_override = Thread.current[:inbound_http_logger_config_override]
 
       # Set thread-local override
-      previous_override = Thread.current[:inbound_http_logger_config_override]
-      Thread.current[:inbound_http_logger_config_override] = temp_config
+      Thread.current[:inbound_http_logger_config_override] = override_config
+
       yield
     ensure
+      # Restore previous thread-local override (or clear if none)
       Thread.current[:inbound_http_logger_config_override] = previous_override
     end
 
@@ -87,8 +102,9 @@ module InboundHTTPLogger
       Thread.current[:inbound_http_logger_loggable] = loggable
     end
 
-    # Clear thread-local data
+    # Clear thread-local data (for test cleanup)
     def clear_thread_data
+      # Thread.current[:inbound_http_logger_config_override] = nil  # Disabled
       Thread.current[:inbound_http_logger_metadata] = nil
       Thread.current[:inbound_http_logger_loggable] = nil
     end
@@ -114,18 +130,10 @@ module InboundHTTPLogger
     # Reset configuration to defaults (useful for testing)
     # WARNING: This will lose all customizations from initializers
     def reset_configuration!
-      @configuration = nil
+      @config_mutex.synchronize do
+        @global_configuration = nil
+      end
       # Also clear any thread-local overrides
-      Thread.current[:inbound_http_logger_config_override] = nil
-    end
-
-    # Create a new configuration instance with defaults
-    def create_fresh_configuration
-      Configuration.new
-    end
-
-    # Clear thread-local configuration override
-    def clear_configuration_override
       Thread.current[:inbound_http_logger_config_override] = nil
     end
 

@@ -2,82 +2,88 @@
 
 require 'test_helper'
 
-describe InboundHTTPLogger do
-  it 'has a version number' do
-    _(::InboundHTTPLogger::VERSION).wont_be_nil
+class InboundHTTPLoggerTest < InboundHTTPLoggerTestCase
+  def test_has_a_version_number
+    refute_nil ::InboundHTTPLogger::VERSION
+  end
+end
+
+class InboundHTTPLoggerConfigurationTest < InboundHTTPLoggerTestCase
+  def test_starts_disabled_by_default
+    # Reset to default state (disabled)
+    InboundHTTPLogger.disable!
+    refute InboundHTTPLogger.enabled?
   end
 
-  describe 'configuration' do
-    it 'starts disabled by default' do
-      _(InboundHTTPLogger.enabled?).must_equal false
-    end
+  def test_can_be_enabled_and_disabled
+    InboundHTTPLogger.enable!
+    assert InboundHTTPLogger.enabled?
 
-    it 'can be enabled and disabled' do
-      InboundHTTPLogger.enable!
-      _(InboundHTTPLogger.enabled?).must_equal true
-
-      InboundHTTPLogger.disable!
-      _(InboundHTTPLogger.enabled?).must_equal false
-    end
-
-    it 'can be configured with a block' do
-      InboundHTTPLogger.configure do |config|
-        config.enabled = true
-        config.debug_logging = true
-      end
-
-      _(InboundHTTPLogger.enabled?).must_equal true
-      _(InboundHTTPLogger.configuration.debug_logging).must_equal true
-    end
+    InboundHTTPLogger.disable!
+    refute InboundHTTPLogger.enabled?
   end
 
-  describe 'controller filtering' do
-    before do
-      InboundHTTPLogger.enable!
+  def test_can_be_configured_with_a_block
+    InboundHTTPLogger.configure do |config|
+      config.enabled = true
+      config.debug_logging = true
     end
 
-    it 'allows normal controllers by default' do
-      _(InboundHTTPLogger.enabled_for?('users')).must_equal true
-      _(InboundHTTPLogger.enabled_for?('users', 'show')).must_equal true
-    end
+    assert InboundHTTPLogger.enabled?
+    assert InboundHTTPLogger.configuration.debug_logging
+  end
+end
 
-    it 'excludes Rails internal controllers by default' do
-      _(InboundHTTPLogger.enabled_for?('rails/health')).must_equal false
-      _(InboundHTTPLogger.enabled_for?('action_cable/internal')).must_equal false
-    end
-
-    it 'can exclude custom controllers' do
-      InboundHTTPLogger.configuration.exclude_controller('admin')
-      _(InboundHTTPLogger.enabled_for?('admin')).must_equal false
-      _(InboundHTTPLogger.enabled_for?('admin', 'index')).must_equal false
-    end
-
-    it 'can exclude specific actions' do
-      InboundHTTPLogger.configuration.exclude_action('users', 'internal')
-      _(InboundHTTPLogger.enabled_for?('users', 'show')).must_equal true
-      _(InboundHTTPLogger.enabled_for?('users', 'internal')).must_equal false
-    end
+class InboundHTTPLoggerControllerFilteringTest < InboundHTTPLoggerTestCase
+  def setup
+    super
+    InboundHTTPLogger.enable!
   end
 
-  describe 'thread-local data management' do
-    it 'can set and clear metadata' do
-      metadata = { user_id: 123 }
-      InboundHTTPLogger.set_metadata(metadata)
+  def test_allows_normal_controllers_by_default
+    assert InboundHTTPLogger.enabled_for?('users')
+    assert InboundHTTPLogger.enabled_for?('users', 'show')
+  end
 
-      _(Thread.current[:inbound_http_logger_metadata]).must_equal metadata
+  def test_excludes_rails_internal_controllers_by_default
+    refute InboundHTTPLogger.enabled_for?('rails/health')
+    refute InboundHTTPLogger.enabled_for?('action_cable/internal')
+  end
 
-      InboundHTTPLogger.clear_thread_data
-      _(Thread.current[:inbound_http_logger_metadata]).must_be_nil
-    end
+  def test_can_exclude_custom_controllers
+    InboundHTTPLogger.configuration.exclude_controller('admin')
+    refute InboundHTTPLogger.enabled_for?('admin')
+    refute InboundHTTPLogger.enabled_for?('admin', 'index')
+  end
 
-    it 'can set and clear loggable' do
-      loggable = Object.new
-      InboundHTTPLogger.set_loggable(loggable)
+  def test_can_exclude_specific_actions
+    InboundHTTPLogger.configuration.exclude_action('users', 'internal')
+    assert InboundHTTPLogger.enabled_for?('users', 'show')
+    refute InboundHTTPLogger.enabled_for?('users', 'internal')
+  end
+end
 
-      _(Thread.current[:inbound_http_logger_loggable]).must_equal loggable
+class InboundHTTPLoggerThreadLocalDataTest < InboundHTTPLoggerTestCase
+  # This test class specifically tests thread-local data
+  # Disable parallelization to prevent thread interference
+  parallelize(workers: 0)
+  def test_can_set_and_clear_metadata
+    metadata = { user_id: 123 }
+    InboundHTTPLogger.set_metadata(metadata)
 
-      InboundHTTPLogger.clear_thread_data
-      _(Thread.current[:inbound_http_logger_loggable]).must_be_nil
-    end
+    assert_equal metadata, Thread.current[:inbound_http_logger_metadata]
+
+    InboundHTTPLogger.clear_thread_data
+    assert_nil Thread.current[:inbound_http_logger_metadata]
+  end
+
+  def test_can_set_and_clear_loggable
+    loggable = Object.new
+    InboundHTTPLogger.set_loggable(loggable)
+
+    assert_equal loggable, Thread.current[:inbound_http_logger_loggable]
+
+    InboundHTTPLogger.clear_thread_data
+    assert_nil Thread.current[:inbound_http_logger_loggable]
   end
 end

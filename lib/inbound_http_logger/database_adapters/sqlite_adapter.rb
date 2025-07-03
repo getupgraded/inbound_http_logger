@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require_relative 'base_adapter'
+require_relative '../models/inbound_request_log'
 
 module InboundHTTPLogger
   module DatabaseAdapters

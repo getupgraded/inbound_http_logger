@@ -43,70 +43,97 @@ module InboundHTTPLogger
         end
       }
 
-      # JSON columns are automatically handled in Rails 8.0+
-
-      # Check if we're using JSONB (PostgreSQL) or regular JSON
-      # Memoized for performance since this is called on every log entry
-      def self.using_jsonb?
-        # Use a class variable for thread-safe memoization
-        @@using_jsonb ||= connection.adapter_name == 'PostgreSQL' &&
-                          columns_hash['response_body']&.sql_type == 'jsonb'
-      end
-
       # Class methods for logging
       class << self
-        # Log a completed request
+        # JSON columns are automatically handled in Rails 8.0+
+
+        # Check if we're using JSONB (PostgreSQL) or regular JSON
+        # Memoized for performance since this is called on every log entry
+        def using_jsonb?
+          # Use an instance variable on the class for proper isolation between adapter classes
+          @using_jsonb ||= begin
+            # Check if we're in a safe context to make database calls
+            return false unless connection.active?
+
+            # Safely check adapter type with error handling
+            connection.adapter_name == 'PostgreSQL' &&
+              columns_hash['response_body']&.sql_type == 'jsonb'
+          rescue StandardError
+            # If we can't determine the type safely, default to false
+            # Don't log here to avoid potential infinite recursion during database operations
+            false
+          end
+        end
+
+        # Reset any cached database adapters (for testing)
+        def reset_adapter_cache!
+          # Reset the memoized using_jsonb? value to ensure proper test isolation
+          @using_jsonb = nil
+
+          # Also reset on any dynamically created adapter classes
+          return unless defined?(InboundHTTPLogger::DatabaseAdapters)
+
+          InboundHTTPLogger::DatabaseAdapters.constants.each do |const_name|
+            const = InboundHTTPLogger::DatabaseAdapters.const_get(const_name)
+            const.instance_variable_set(:@using_jsonb, nil) if const.is_a?(Class) && const < InboundRequestLog
+          rescue NameError
+            # Ignore if constant doesn't exist or isn't accessible
+          end
+        end
+
+        # Log a completed request with failsafe error handling
         def log_request(request, request_body, status, headers, response_body, duration_seconds, options = {})
-          return nil unless InboundHTTPLogger.enabled?
-          return nil unless InboundHTTPLogger.configuration.should_log_path?(request.path)
+          config = InboundHTTPLogger.configuration
+          return nil unless config.enabled?
+          return nil unless config.should_log_path?(request.path)
 
           # Content type filtering is handled by middleware
 
-          begin
-            # Calculate duration in milliseconds
-            duration_ms = (duration_seconds * 1000).round(2)
+          # Calculate duration in milliseconds
+          duration_ms = (duration_seconds * 1000).round(2)
 
-            # Get metadata and loggable from thread-local or options
-            metadata = Thread.current[:inbound_http_logger_metadata] || options[:metadata] || {}
-            loggable = Thread.current[:inbound_http_logger_loggable] || options[:loggable]
+          # Get metadata and loggable from thread-local or options
+          metadata = Thread.current[:inbound_http_logger_metadata] || options[:metadata] || {}
+          loggable = Thread.current[:inbound_http_logger_loggable] || options[:loggable]
 
-            # Add controller/action to metadata if available
-            if request.env['action_controller.instance']
-              controller = request.env['action_controller.instance']
-              metadata = metadata.merge(
-                controller: controller.controller_name,
-                action: controller.action_name
-              )
-            end
-
-            # Filter sensitive data
-            filtered_request_headers = InboundHTTPLogger.configuration.filter_headers(extract_request_headers(request))
-            filtered_response_headers = InboundHTTPLogger.configuration.filter_headers(headers)
-            filtered_request_body = filter_body_for_storage(request_body)
-            filtered_response_body = filter_body_for_storage(response_body)
-
-            # Create the log entry
-            create!(
-              request_id: request.env['action_dispatch.request_id'] || SecureRandom.uuid,
-              http_method: request.request_method,
-              url: request.fullpath,
-              ip_address: request.ip,
-              user_agent: request.user_agent || request.env['HTTP_USER_AGENT'],
-              referrer: request.referer || request.env['HTTP_REFERER'],
-              request_headers: filtered_request_headers,
-              request_body: filtered_request_body,
-              status_code: status,
-              response_headers: filtered_response_headers,
-              response_body: filtered_response_body,
-              duration_seconds: duration_seconds,
-              duration_ms: duration_ms,
-              loggable: loggable,
-              metadata: metadata
+          # Add controller/action to metadata if available
+          if request.env['action_controller.instance']
+            controller = request.env['action_controller.instance']
+            metadata = metadata.merge(
+              controller: controller.controller_name,
+              action: controller.action_name
             )
-          rescue StandardError => e
-            InboundHTTPLogger.configuration.logger.error("Error logging inbound request: #{e.class}: #{e.message}")
-            nil
           end
+
+          # Filter sensitive data
+          filtered_request_headers = InboundHTTPLogger.configuration.filter_headers(extract_request_headers(request))
+          filtered_response_headers = InboundHTTPLogger.configuration.filter_headers(headers)
+          filtered_request_body = filter_body_for_storage(request_body)
+          filtered_response_body = filter_body_for_storage(response_body)
+
+          # Create the log entry
+          create!(
+            request_id: request.env['action_dispatch.request_id'] || SecureRandom.uuid,
+            http_method: request.request_method,
+            url: request.fullpath,
+            ip_address: request.ip,
+            user_agent: request.user_agent || request.env['HTTP_USER_AGENT'],
+            referrer: request.referer || request.env['HTTP_REFERER'],
+            request_headers: filtered_request_headers,
+            request_body: filtered_request_body,
+            status_code: status,
+            response_headers: filtered_response_headers,
+            response_body: filtered_response_body,
+            duration_seconds: duration_seconds,
+            duration_ms: duration_ms,
+            loggable: loggable,
+            metadata: metadata
+          )
+        rescue StandardError => e
+          # Failsafe: Never let logging errors break the main application flow
+          logger = config.logger
+          logger&.error("InboundHTTPLogger: Failed to log request: #{e.class}: #{e.message}")
+          nil
         end
 
         # Shared logging logic for database adapters
@@ -228,8 +255,14 @@ module InboundHTTPLogger
                 'LOWER(url) LIKE ? OR request_body::text ILIKE ? OR response_body::text ILIKE ?',
                 q, "%#{original_query}%", "%#{original_query}%"
               )
+            elsif connection.adapter_name == 'PostgreSQL'
+              # PostgreSQL with regular JSON columns (not JSONB) - can't use LOWER() on JSON
+              scope.where(
+                'LOWER(url) LIKE ? OR request_body::text ILIKE ? OR response_body::text ILIKE ?',
+                q, "%#{original_query}%", "%#{original_query}%"
+              )
             else
-              # Default implementation for other databases
+              # Default implementation for SQLite and other databases
               scope.where(
                 'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
                 q, q, q
@@ -326,7 +359,7 @@ module InboundHTTPLogger
         Rack::Utils::HTTP_STATUS_CODES[status_code] || status_code.to_s
       end
 
-      private
+      private # Instance methods
 
         # Format headers for display
         def formatted_headers(headers)

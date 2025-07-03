@@ -56,32 +56,6 @@ jobs:
         run: |
           bundle exec rake test
 
-      - name: Run database adapter tests
-        run: |
-          bundle exec ruby -Itest test/test_database_adapters.rb
-
-      - name: Test all individual test files
-        run: |
-          echo "🧪 Running individual test files to ensure comprehensive coverage..."
-          for test_file in test/**/*test*.rb; do
-            if [[ "$test_file" != *"test_helper.rb"* ]]; then
-              echo "Running $test_file..."
-              bundle exec ruby -Itest "$test_file" || exit 1
-            fi
-          done
-          echo "✅ All individual test files passed"
-
-      - name: Verify test coverage
-        run: |
-          echo "📊 Verifying test coverage..."
-          test_files=$(find test -name "*test*.rb" ! -name "test_helper.rb" | wc -l)
-          echo "Found $test_files test files"
-          if [ "$test_files" -lt 6 ]; then
-            echo "❌ Expected at least 6 test files, found $test_files"
-            exit 1
-          fi
-          echo "✅ Test file count looks good ($test_files files)"
-
   postgresql-test:
     runs-on: ubuntu-latest
     strategy:

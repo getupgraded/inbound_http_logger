@@ -2,8 +2,10 @@
 
 require 'test_helper'
 
-class TestThreadSafeConfiguration < Minitest::Test
-  include TestHelpers
+class TestThreadSafeConfiguration < InboundHTTPLoggerTestCase
+  # This test class specifically tests threading behavior by creating threads manually
+  # Disable parallelization to prevent interference between Minitest thread and our tests
+  parallelize(workers: 0)
 
   def test_thread_safe_configuration_isolation
     # Test that configuration changes in one thread don't affect another
@@ -34,8 +36,8 @@ class TestThreadSafeConfiguration < Minitest::Test
     # Verify thread isolation
     assert results[0][:enabled], 'Thread 0 should have enabled: true'
     assert results[0][:debug_logging], 'Thread 0 should have debug_logging: true'
-    assert_not results[1][:enabled], 'Thread 1 should have enabled: false'
-    assert_not results[1][:debug_logging], 'Thread 1 should have debug_logging: false'
+    refute results[1][:enabled], 'Thread 1 should have enabled: false'
+    refute results[1][:debug_logging], 'Thread 1 should have debug_logging: false'
   end
 
   def test_configuration_backup_and_restore
