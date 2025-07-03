@@ -3,13 +3,13 @@
 require 'rails/generators'
 require 'rails/generators/active_record'
 
-module InboundHttpLogger
+module InboundHTTPLogger
   module Generators
     class MigrationGenerator < Rails::Generators::Base
       include ActiveRecord::Generators::Migration
 
       source_root File.expand_path('templates', __dir__)
-      desc 'Generate migration for InboundHttpLogger'
+      desc 'Generate migration for InboundHTTPLogger'
 
       def create_migration_file
         migration_template(

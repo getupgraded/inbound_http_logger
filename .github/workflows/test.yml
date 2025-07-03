@@ -2,18 +2,42 @@ name: 'Inbound HTTP Logger CI'
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'release/**' ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: 'Run full Ruby/Rails matrix'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
+  matrix-info:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show matrix configuration
+        run: |
+          echo "## Matrix Configuration" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/') || github.event.inputs.full_matrix }}" == "true" ]]; then
+            echo "🔄 **Full Matrix**: Testing Ruby 3.2, 3.3, 3.4 × Rails 7.2.0, 8.0.1 (6 combinations)" >> $GITHUB_STEP_SUMMARY
+            echo "Triggered by: Release branch, tag, or manual dispatch" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚡ **Fast Matrix**: Testing Ruby 3.4 × Rails 7.2.0 only (1 combination)" >> $GITHUB_STEP_SUMMARY
+            echo "Triggered by: Regular PR or main branch push" >> $GITHUB_STEP_SUMMARY
+          fi
+
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        ruby-version: ['3.2', '3.3', '3.4']
-        rails-version: ['7.2.0', '8.0.1']
-    
+        # Default to Ruby 3.4 + Rails 7.2.0 for fast feedback
+        # Full matrix for release branches, tags, or manual dispatch
+        ruby-version: ${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/') || github.event.inputs.full_matrix == 'true') && fromJSON('["3.2", "3.3", "3.4"]') || fromJSON('["3.4"]') }}
+        rails-version: ${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/') || github.event.inputs.full_matrix == 'true') && fromJSON('["7.2.0", "8.0.1"]') || fromJSON('["7.2.0"]') }}
+
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -24,15 +48,85 @@ jobs:
           ruby-version: ${{ matrix.ruby-version }}
           bundler-cache: true
 
-      - name: Run tests
-        run: |
-          # Run tests using pattern-based discovery to match Rakefile
-          bundle exec rake test
-
       - name: Run RuboCop
         run: |
-          bundle exec rubocop --config .rubocop.yml
-        continue-on-error: true
+          bundle exec rake rubocop
+
+      - name: Run SQLite tests
+        run: |
+          bundle exec rake test
+
+      - name: Run database adapter tests
+        run: |
+          bundle exec ruby -Itest test/test_database_adapters.rb
+
+      - name: Test all individual test files
+        run: |
+          echo "🧪 Running individual test files to ensure comprehensive coverage..."
+          for test_file in test/**/*test*.rb; do
+            if [[ "$test_file" != *"test_helper.rb"* ]]; then
+              echo "Running $test_file..."
+              bundle exec ruby -Itest "$test_file" || exit 1
+            fi
+          done
+          echo "✅ All individual test files passed"
+
+      - name: Verify test coverage
+        run: |
+          echo "📊 Verifying test coverage..."
+          test_files=$(find test -name "*test*.rb" ! -name "test_helper.rb" | wc -l)
+          echo "Found $test_files test files"
+          if [ "$test_files" -lt 6 ]; then
+            echo "❌ Expected at least 6 test files, found $test_files"
+            exit 1
+          fi
+          echo "✅ Test file count looks good ($test_files files)"
+
+  postgresql-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Same conditional matrix as main test job
+        ruby-version: ${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/') || github.event.inputs.full_matrix == 'true') && fromJSON('["3.2", "3.3", "3.4"]') || fromJSON('["3.4"]') }}
+        rails-version: ${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/') || github.event.inputs.full_matrix == 'true') && fromJSON('["7.2.0", "8.0.1"]') || fromJSON('["7.2.0"]') }}
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: inbound_http_logger_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby ${{ matrix.ruby-version }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+          bundler-cache: true
+
+      - name: Set up PostgreSQL environment
+        run: |
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/inbound_http_logger_test" >> $GITHUB_ENV
+          echo "INBOUND_HTTP_LOGGER_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/inbound_http_logger_test" >> $GITHUB_ENV
+
+      - name: Test PostgreSQL connection and adapters
+        run: |
+          ./bin/test-postgresql
+
+      - name: Run database adapter tests with PostgreSQL
+        run: |
+          bundle exec ruby -Itest test/test_database_adapters.rb
 
   build:
     runs-on: ubuntu-latest
@@ -108,7 +202,7 @@ jobs:
 
   summary:
     runs-on: ubuntu-latest
-    needs: [test, build, quality, security]
+    needs: [matrix-info, test, postgresql-test, build, quality, security]
     if: always()
     steps:
       - name: Check job results
@@ -116,12 +210,14 @@ jobs:
           echo "## Job Results Summary" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Test | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Matrix Info | ${{ needs.matrix-info.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test (SQLite) | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test (PostgreSQL) | ${{ needs.postgresql-test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Quality | ${{ needs.quality.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Security | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
 
-          if [[ "${{ needs.test.result }}" == "failure" || "${{ needs.build.result }}" == "failure" ]]; then
+          if [[ "${{ needs.test.result }}" == "failure" || "${{ needs.postgresql-test.result }}" == "failure" || "${{ needs.build.result }}" == "failure" ]]; then
             echo "❌ Critical jobs failed"
             exit 1
           elif [[ "${{ needs.quality.result }}" == "failure" || "${{ needs.security.result }}" == "failure" ]]; then

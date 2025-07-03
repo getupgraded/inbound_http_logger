@@ -4,7 +4,7 @@ require_relative 'lib/inbound_http_logger/version'
 
 Gem::Specification.new do |spec|
   spec.name = 'inbound_http_logger'
-  spec.version = InboundHttpLogger::VERSION
+  spec.version = InboundHTTPLogger::VERSION
   spec.authors = ['Ziad Sawalha']
   spec.email = ['ziad@getupgraded.com']
 
@@ -19,17 +19,17 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
   spec.extra_rdoc_files = ['LICENSE.txt']
 
-  # Runtime dependencies
-  spec.add_dependency 'activerecord', '>= 7.2.0'
-  spec.add_dependency 'activesupport', '>= 7.2.0'
+  # Runtime dependencies - Rails 7.x only (Rails 8 compatibility issues)
+  spec.add_dependency 'activerecord', '>= 7.2.0', '< 8.0'
+  spec.add_dependency 'activesupport', '>= 7.2.0', '< 8.0'
   spec.add_dependency 'rack', '>= 2.0'
-  spec.add_dependency 'railties', '>= 7.2.0'
+  spec.add_dependency 'railties', '>= 7.2.0', '< 8.0'
 
   # Development dependencies
   spec.add_development_dependency 'minitest', '~> 5.0'
   spec.add_development_dependency 'mocha', '~> 2.0'
   spec.add_development_dependency 'pg', '>= 1.5'
-  spec.add_development_dependency 'rails', '>= 7.2.0'
+  spec.add_development_dependency 'rails', '>= 7.2.0', '< 8.0'
   spec.add_development_dependency 'rake', '~> 13.0'
   spec.add_development_dependency 'rubocop', '~> 1.75'
   spec.add_development_dependency 'rubocop-md', '~> 2.0'

@@ -3,10 +3,10 @@
 namespace :inbound_http_logger do
   desc 'Analyze inbound HTTP request logs'
   task analyze: :environment do
-    puts "=== InboundHttpLogger Analysis ==="
+    puts "=== InboundHTTPLogger Analysis ==="
     puts
 
-    model = InboundHttpLogger::Models::InboundRequestLog
+    model = InboundHTTPLogger::Models::InboundRequestLog
 
     # Total counts
     total_logs = model.count
@@ -60,7 +60,7 @@ namespace :inbound_http_logger do
       if failed_count > 0
         puts "\n=== Error Analysis ==="
         puts "  Total failed requests: #{failed_count} (#{(failed_count.to_f / total_logs * 100).round(1)}%)"
-        
+
         error_paths = model.failed.group(:url).count.sort_by { |_, count| -count }.first(5)
         puts "  Top error paths:"
         error_paths.each do |path, count|
@@ -68,34 +68,34 @@ namespace :inbound_http_logger do
         end
       end
     else
-      puts "No logs found. Make sure InboundHttpLogger is enabled and receiving requests."
+      puts "No logs found. Make sure InboundHTTPLogger is enabled and receiving requests."
     end
 
     puts "\n=== Configuration Status ==="
-    puts "  Enabled: #{InboundHttpLogger.enabled?}"
-    puts "  Debug logging: #{InboundHttpLogger.configuration.debug_logging}"
-    puts "  Max body size: #{InboundHttpLogger.configuration.max_body_size} bytes"
-    puts "  Excluded paths: #{InboundHttpLogger.configuration.excluded_paths.size} patterns"
-    puts "  Excluded controllers: #{InboundHttpLogger.configuration.excluded_controllers.size} controllers"
+    puts "  Enabled: #{InboundHTTPLogger.enabled?}"
+    puts "  Debug logging: #{InboundHTTPLogger.configuration.debug_logging}"
+    puts "  Max body size: #{InboundHTTPLogger.configuration.max_body_size} bytes"
+    puts "  Excluded paths: #{InboundHTTPLogger.configuration.excluded_paths.size} patterns"
+    puts "  Excluded controllers: #{InboundHTTPLogger.configuration.excluded_controllers.size} controllers"
   end
 
   desc 'Clean up old inbound request logs'
   task :cleanup, [:days] => :environment do |_, args|
     days = (args[:days] || 90).to_i
-    
+
     puts "Cleaning up inbound request logs older than #{days} days..."
-    
-    deleted_count = InboundHttpLogger::Models::InboundRequestLog.cleanup(days)
-    
+
+    deleted_count = InboundHTTPLogger::Models::InboundRequestLog.cleanup(days)
+
     puts "Deleted #{deleted_count} old log entries."
   end
 
   desc 'Show recent failed requests'
   task failed: :environment do
     puts "=== Recent Failed Requests ==="
-    
-    failed_logs = InboundHttpLogger::Models::InboundRequestLog.failed.recent.limit(20)
-    
+
+    failed_logs = InboundHTTPLogger::Models::InboundRequestLog.failed.recent.limit(20)
+
     if failed_logs.any?
       failed_logs.each do |log|
         puts "\n#{log.created_at.strftime('%Y-%m-%d %H:%M:%S')} - #{log.status_code}"
@@ -112,11 +112,11 @@ namespace :inbound_http_logger do
   desc 'Show slow requests'
   task :slow, [:threshold] => :environment do |_, args|
     threshold = (args[:threshold] || 1000).to_i
-    
+
     puts "=== Slow Requests (>#{threshold}ms) ==="
-    
-    slow_logs = InboundHttpLogger::Models::InboundRequestLog.slow(threshold).recent.limit(20)
-    
+
+    slow_logs = InboundHTTPLogger::Models::InboundRequestLog.slow(threshold).recent.limit(20)
+
     if slow_logs.any?
       slow_logs.each do |log|
         puts "\n#{log.created_at.strftime('%Y-%m-%d %H:%M:%S')} - #{log.formatted_duration}"
