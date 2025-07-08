@@ -5,7 +5,9 @@
 * Database adapter architecture for better maintainability and flexibility.
 * Added support for alternate database for SQLite logging.
 * Added support for test mode for SQLite logging.
-* Reduce model indices and fields
+* Reduce model indices and fields.
+* Rename gem to use HTTP (not Http) in the name.
+* Better threading/parallel run support in tests.
 
 # 0.0.2
 
