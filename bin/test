@@ -1,0 +1,106 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'bundler/setup'
+
+# Test runner script for comprehensive testing
+class TestRunner
+  def initialize
+    @failed = false
+  end
+
+  def run
+    puts "🧪 Running Inbound HTTP Logger Test Suite"
+    puts "=" * 50
+
+    run_rubocop
+    run_sqlite_tests
+    run_postgresql_tests if postgresql_available?
+    run_all_tests
+
+    if @failed
+      puts "\n❌ Some tests failed"
+      exit 1
+    else
+      puts "\n✅ All tests passed!"
+      exit 0
+    end
+  end
+
+  private
+
+  def run_rubocop
+    puts "\n🔍 Running RuboCop..."
+    system('bundle exec rubocop --config .rubocop.yml') || (@failed = true)
+  end
+
+  def run_sqlite_tests
+    puts "\n🗄️  Running SQLite tests..."
+    ENV.delete('DATABASE_URL')
+    ENV.delete('INBOUND_HTTP_LOGGER_TEST_DATABASE_URL')
+
+    system('bundle exec rake test') || (@failed = true)
+  end
+
+  def run_postgresql_tests
+    puts "\n🐘 Running PostgreSQL tests..."
+
+    # Set up PostgreSQL environment
+    ENV['DATABASE_URL'] = postgresql_url
+    ENV['INBOUND_HTTP_LOGGER_TEST_DATABASE_URL'] = postgresql_url
+
+    # Create test database if it doesn't exist
+    create_postgresql_test_database
+
+    system('bundle exec rake test') || (@failed = true)
+  end
+
+  def run_all_tests
+    puts "\n🔄 Running comprehensive test suite..."
+
+    # Run all test files individually to catch any missed tests
+    test_files = Dir['test/**/*test*.rb'].reject { |f| f.include?('test_helper') }
+
+    test_files.each do |file|
+      puts "  Running #{file}..."
+      system("bundle exec ruby -Itest #{file}") || (@failed = true)
+    end
+  end
+
+  def postgresql_available?
+    require 'pg'
+    true
+  rescue LoadError
+    puts "⚠️  PostgreSQL gem not available, skipping PostgreSQL tests"
+    false
+  end
+
+  def postgresql_url
+    ENV['INBOUND_HTTP_LOGGER_TEST_DATABASE_URL'] ||
+      'postgresql://postgres:postgres@localhost:5432/inbound_http_logger_test'
+  end
+
+  def create_postgresql_test_database
+    uri = URI.parse(postgresql_url)
+
+    # Connect to postgres database to create test database
+    admin_conn = PG.connect(
+      host: uri.host,
+      port: uri.port || 5432,
+      dbname: 'postgres',
+      user: uri.user,
+      password: uri.password
+    )
+
+    # Create test database if it doesn't exist
+    admin_conn.exec("CREATE DATABASE #{uri.path[1..]}")
+  rescue PG::DuplicateDatabase
+    # Database already exists, that's fine
+  rescue StandardError => e
+    puts "⚠️  Could not create PostgreSQL test database: #{e.message}"
+  ensure
+    admin_conn&.close
+  end
+end
+
+TestRunner.new.run if __FILE__ == $PROGRAM_NAME

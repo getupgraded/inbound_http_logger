@@ -2,46 +2,76 @@
 
 require 'test_helper'
 
-describe InboundHttpLogger::Concerns::ControllerLogging do
-  before do
+class ControllerLoggingModuleMethodsTest < InboundHTTPLoggerTestCase
+  def setup
+    super
     # Clear thread-local data before each test
     Thread.current[:inbound_http_logger_metadata] = nil
     Thread.current[:inbound_http_logger_loggable] = nil
-    InboundHttpLogger.enable!
+    InboundHTTPLogger.enable!
   end
 
-  # Create a mock controller base class that provides Rails controller methods
-  let(:controller_base_class) do
-    Class.new do
-      # Mock Rails controller methods
-      def self.after_action(*args, **kwargs)
-        # No-op for testing
-      end
-
-      def self.skip_after_action(*args, **kwargs)
-        # No-op for testing
-      end
-    end
+  def test_can_set_and_get_metadata
+    metadata = { test: 'value' }
+    InboundHTTPLogger.set_metadata(metadata)
+    assert_equal metadata, Thread.current[:inbound_http_logger_metadata]
   end
 
-  # Test the module methods directly without including in a controller
-  describe 'module methods' do
-    it 'can set and get metadata' do
-      metadata = { test: 'value' }
-      InboundHttpLogger.set_metadata(metadata)
-      _(Thread.current[:inbound_http_logger_metadata]).must_equal metadata
-    end
+  def test_can_set_and_get_loggable
+    object = Object.new
+    InboundHTTPLogger.set_loggable(object)
+    assert_equal object, Thread.current[:inbound_http_logger_loggable]
+  end
+end
 
-    it 'can set and get loggable' do
-      object = Object.new
-      InboundHttpLogger.set_loggable(object)
-      _(Thread.current[:inbound_http_logger_loggable]).must_equal object
-    end
+class ControllerLoggingSetupTest < InboundHTTPLoggerTestCase
+  def setup
+    super
+    # Clear thread-local data before each test
+    Thread.current[:inbound_http_logger_metadata] = nil
+    Thread.current[:inbound_http_logger_loggable] = nil
+    InboundHTTPLogger.enable!
+    @mock_controller = create_mock_controller
   end
 
-  # Test the setup_inbound_logging method by calling it directly
-  describe 'setup_inbound_logging method' do
-    let(:mock_controller) do
+  def test_sets_basic_metadata
+    @mock_controller.send(:setup_inbound_logging)
+
+    metadata = Thread.current[:inbound_http_logger_metadata]
+    refute_nil metadata
+    assert_equal 'test', metadata[:controller]
+    assert_equal 'index', metadata[:action]
+    assert_equal 'html', metadata[:format]
+    assert_equal 'test-session-id', metadata[:session_id]
+    assert_equal 'test-request-id', metadata[:request_id]
+  end
+
+  def test_works_with_basic_metadata_when_no_callback_is_set
+    # Default mock_controller doesn't have any callback
+    @mock_controller.send(:setup_inbound_logging)
+
+    metadata = Thread.current[:inbound_http_logger_metadata]
+    # Basic metadata should still be present
+    assert_equal 'test', metadata[:controller]
+    assert_equal 'index', metadata[:action]
+    assert_equal 'html', metadata[:format]
+  end
+
+  def test_works_without_any_callback_set
+    # Default mock_controller doesn't have any callback
+    @mock_controller.send(:setup_inbound_logging)
+
+    metadata = Thread.current[:inbound_http_logger_metadata]
+    assert_nil metadata[:resource_id]
+    assert_nil metadata[:organization_id]
+    # But basic metadata should still be present
+    assert_equal 'test', metadata[:controller]
+    assert_equal 'index', metadata[:action]
+  end
+
+  private
+
+    def create_mock_controller
       controller = Object.new
 
       # Mock basic controller methods
@@ -82,354 +112,370 @@ describe InboundHttpLogger::Concerns::ControllerLogging do
       end
 
       # Include the concern methods
-      controller.extend(InboundHttpLogger::Concerns::ControllerLogging)
+      controller.extend(InboundHTTPLogger::Concerns::ControllerLogging)
 
       controller
     end
+end
 
-    it 'sets basic metadata' do
-      mock_controller.send(:setup_inbound_logging)
+class ControllerLoggingLogRequestsTest < InboundHTTPLoggerTestCase
+  def setup
+    super
+    @controller_base_class = Class.new do
+      # Mock Rails controller methods
+      def self.after_action(*args, **kwargs)
+        # No-op for testing
+      end
 
-      metadata = Thread.current[:inbound_http_logger_metadata]
-      _(metadata).wont_be_nil
-      _(metadata[:controller]).must_equal 'test'
-      _(metadata[:action]).must_equal 'index'
-      _(metadata[:format]).must_equal 'html'
-      _(metadata[:session_id]).must_equal 'test-session-id'
-      _(metadata[:request_id]).must_equal 'test-request-id'
-    end
-
-    it 'works with basic metadata when no callback is set' do
-      # Default mock_controller doesn't have any callback
-      mock_controller.send(:setup_inbound_logging)
-
-      metadata = Thread.current[:inbound_http_logger_metadata]
-      # Basic metadata should still be present
-      _(metadata[:controller]).must_equal 'test'
-      _(metadata[:action]).must_equal 'index'
-      _(metadata[:format]).must_equal 'html'
-    end
-
-    it 'works without any callback set' do
-      # Default mock_controller doesn't have any callback
-      mock_controller.send(:setup_inbound_logging)
-
-      metadata = Thread.current[:inbound_http_logger_metadata]
-      _(metadata[:resource_id]).must_be_nil
-      _(metadata[:organization_id]).must_be_nil
-      # But basic metadata should still be present
-      _(metadata[:controller]).must_equal 'test'
-      _(metadata[:action]).must_equal 'index'
-    end
-  end
-
-  describe 'log_requests method' do
-    let(:mock_controller_class) do
-      Class.new(controller_base_class) do
-        include InboundHttpLogger::Concerns::ControllerLogging
+      def self.skip_after_action(*args, **kwargs)
+        # No-op for testing
       end
     end
 
-    it 'raises error when both only and except are specified' do
-      _(proc {
-        mock_controller_class.log_requests(only: [:show], except: [:index])
-      }).must_raise ArgumentError
-    end
-
-    it 'accepts only parameter' do
-      # Should not raise an error
-      mock_controller_class.log_requests(only: %i[show index])
-    end
-
-    it 'accepts except parameter' do
-      # Should not raise an error
-      mock_controller_class.log_requests(except: %i[internal debug])
-    end
-
-    it 'accepts context parameter with only' do
-      # Should not raise an error
-      mock_controller_class.log_requests(only: [:show], context: :set_context)
-    end
-
-    it 'accepts context parameter with except' do
-      # Should not raise an error
-      mock_controller_class.log_requests(except: [:internal], context: ->(log) { log.metadata[:test] = 'value' })
-    end
-
-    it 'accepts no parameters for default behavior' do
-      # Should not raise an error
-      mock_controller_class.log_requests
+    @mock_controller_class = Class.new(@controller_base_class) do
+      include InboundHTTPLogger::Concerns::ControllerLogging
     end
   end
 
-  describe 'inheritance behavior' do
-    let(:base_controller_class) do
-      Class.new(controller_base_class) do
-        include InboundHttpLogger::Concerns::ControllerLogging
+  def test_raises_error_when_both_only_and_except_are_specified
+    assert_raises(ArgumentError) do
+      @mock_controller_class.log_requests(only: [:show], except: [:index])
+    end
+  end
+
+  def test_accepts_only_parameter
+    assert_nothing_raised do
+      @mock_controller_class.log_requests(only: %i[show index])
+    end
+  end
+
+  def test_accepts_except_parameter
+    assert_nothing_raised do
+      @mock_controller_class.log_requests(except: %i[internal debug])
+    end
+  end
+
+  def test_accepts_context_parameter_with_only
+    assert_nothing_raised do
+      @mock_controller_class.log_requests(only: [:show], context: :set_context)
+    end
+  end
+
+  def test_accepts_context_parameter_with_except
+    assert_nothing_raised do
+      @mock_controller_class.log_requests(except: [:internal], context: ->(log) { log.metadata[:test] = 'value' })
+    end
+  end
+
+  def test_accepts_no_parameters_for_default_behavior
+    assert_nothing_raised do
+      @mock_controller_class.log_requests
+    end
+  end
+end
+
+class ControllerLoggingInheritanceTest < InboundHTTPLoggerTestCase
+  def setup
+    super
+    @controller_base_class = Class.new do
+      # Mock Rails controller methods
+      def self.after_action(*args, **kwargs)
+        # No-op for testing
+      end
+
+      def self.skip_after_action(*args, **kwargs)
+        # No-op for testing
       end
     end
 
-    it 'allows subclass to skip actions when base class uses log_requests only' do
-      # Base class logs only specific actions
-      base_controller_class.log_requests only: %i[show index]
+    @base_controller_class = Class.new(@controller_base_class) do
+      include InboundHTTPLogger::Concerns::ControllerLogging
+    end
+  end
 
-      # Subclass skips one of those actions
-      subclass = Class.new(base_controller_class) do
+  def test_allows_subclass_to_skip_actions_when_base_class_uses_log_requests_only
+    # Base class logs only specific actions
+    @base_controller_class.log_requests only: %i[show index]
+
+    # Subclass skips one of those actions
+    assert_nothing_raised do
+      subclass = Class.new(@base_controller_class) do
         skip_inbound_logging :show
       end
-
-      # Should not raise an error
-      _(subclass).wont_be_nil
+      refute_nil subclass
     end
+  end
 
-    it 'allows subclass to use except when base class uses default logging' do
-      # Base class uses default logging (all actions)
-      base_controller_class.log_requests
+  def test_allows_subclass_to_use_except_when_base_class_uses_default_logging
+    # Base class uses default logging (all actions)
+    @base_controller_class.log_requests
 
-      # Subclass excludes specific actions
-      subclass = Class.new(base_controller_class) do
+    # Subclass excludes specific actions
+    assert_nothing_raised do
+      subclass = Class.new(@base_controller_class) do
         log_requests except: %i[internal debug]
       end
-
-      # Should not raise an error
-      _(subclass).wont_be_nil
+      refute_nil subclass
     end
+  end
 
-    it 'allows subclass to override with only when base class uses except' do
-      # Base class excludes some actions
-      base_controller_class.log_requests except: [:internal]
+  def test_allows_subclass_to_override_with_only_when_base_class_uses_except
+    # Base class excludes some actions
+    @base_controller_class.log_requests except: [:internal]
 
-      # Subclass uses only specific actions
-      subclass = Class.new(base_controller_class) do
+    # Subclass uses only specific actions
+    assert_nothing_raised do
+      subclass = Class.new(@base_controller_class) do
         log_requests only: [:show]
       end
+      refute_nil subclass
+    end
+  end
 
-      # Should not raise an error
-      _(subclass).wont_be_nil
+  def test_allows_multiple_inheritance_levels
+    # Base class
+    @base_controller_class.log_requests only: %i[show index create]
+
+    # Middle class
+    middle_class = Class.new(@base_controller_class) do
+      skip_inbound_logging :create
     end
 
-    it 'allows multiple inheritance levels' do
-      # Base class
-      base_controller_class.log_requests only: %i[show index create]
-
-      # Middle class
-      middle_class = Class.new(base_controller_class) do
-        skip_inbound_logging :create
-      end
-
-      # Final subclass
+    # Final subclass
+    assert_nothing_raised do
       subclass = Class.new(middle_class) do
         log_requests except: [:index]
       end
+      refute_nil subclass
+    end
+  end
+end
 
-      # Should not raise an error
-      _(subclass).wont_be_nil
+class ControllerLoggingContextCallbacksTest < InboundHTTPLoggerTestCase
+  def setup
+    super
+    @controller_base_class = Class.new do
+      # Mock Rails controller methods
+      def self.after_action(*args, **kwargs)
+        # No-op for testing
+      end
+
+      def self.skip_after_action(*args, **kwargs)
+        # No-op for testing
+      end
+    end
+
+    @controller_class_with_callback = Class.new(@controller_base_class) do
+      include InboundHTTPLogger::Concerns::ControllerLogging
+
+      attr_accessor :controller_name, :action_name, :request, :session, :test_resource
+
+      def initialize
+        @controller_name = 'test'
+        @action_name = 'index'
+        @request = create_mock_request
+        @session = create_mock_session
+        @test_resource = Object.new.tap { |r| r.define_singleton_method(:id) { 999 } }
+        super
+      end
+
+      # Test method callback
+      def set_log_context(log)
+        log.loggable = @test_resource
+        log.metadata[:custom_field] = 'custom_value'
+      end
+
+      private
+
+        def create_mock_request
+          request = Object.new
+          format_obj = Object.new
+          format_obj.define_singleton_method(:to_s) { 'html' }
+          request.define_singleton_method(:format) { format_obj }
+          request.define_singleton_method(:request_id) { 'test-request-id' }
+          request
+        end
+
+        def create_mock_session
+          session = Object.new
+          session.define_singleton_method(:id) { 'test-session-id' }
+          session
+        end
     end
   end
 
-  describe 'context callbacks' do
-    let(:controller_class_with_callback) do
-      Class.new(controller_base_class) do
-        include InboundHttpLogger::Concerns::ControllerLogging
+  def test_executes_method_based_context_callback
+    @controller_class_with_callback.inbound_logging_context(:set_log_context)
+    controller = @controller_class_with_callback.new
 
-        attr_accessor :controller_name, :action_name, :request, :session, :test_resource
+    controller.send(:setup_inbound_logging)
 
-        def initialize
-          @controller_name = 'test'
-          @action_name = 'index'
-          @request = create_mock_request
-          @session = create_mock_session
-          @test_resource = Object.new.tap { |r| r.define_singleton_method(:id) { 999 } }
-          super
-        end
+    metadata = Thread.current[:inbound_http_logger_metadata]
+    loggable = Thread.current[:inbound_http_logger_loggable]
 
-        # Test method callback
-        def set_log_context(log)
-          log.loggable = @test_resource
-          log.metadata[:custom_field] = 'custom_value'
-        end
+    assert_equal 'custom_value', metadata[:custom_field]
+    assert_equal 999, loggable.id
+  end
 
-        private
+  def test_executes_lambda_based_context_callback
+    test_lambda = lambda { |log|
+      log.metadata[:lambda_field] = 'lambda_value'
+      log.loggable = 'test_loggable'
+    }
 
-          def create_mock_request
-            request = Object.new
-            format_obj = Object.new
-            format_obj.define_singleton_method(:to_s) { 'html' }
-            request.define_singleton_method(:format) { format_obj }
-            request.define_singleton_method(:request_id) { 'test-request-id' }
-            request
-          end
+    @controller_class_with_callback.inbound_logging_context(test_lambda)
+    controller = @controller_class_with_callback.new
 
-          def create_mock_session
-            session = Object.new
-            session.define_singleton_method(:id) { 'test-session-id' }
-            session
-          end
+    controller.send(:setup_inbound_logging)
+
+    metadata = Thread.current[:inbound_http_logger_metadata]
+    loggable = Thread.current[:inbound_http_logger_loggable]
+
+    assert_equal 'lambda_value', metadata[:lambda_field]
+    assert_equal 'test_loggable', loggable
+  end
+
+  def test_handles_missing_callback_method_gracefully
+    @controller_class_with_callback.inbound_logging_context(:nonexistent_method)
+    controller = @controller_class_with_callback.new
+
+    assert_nothing_raised do
+      controller.send(:setup_inbound_logging)
+    end
+
+    metadata = Thread.current[:inbound_http_logger_metadata]
+    refute_nil metadata
+    assert_equal 'test', metadata[:controller]
+  end
+
+  def test_works_without_any_context_callback
+    # Don't set any callback
+    controller = @controller_class_with_callback.new
+
+    controller.send(:setup_inbound_logging)
+
+    metadata = Thread.current[:inbound_http_logger_metadata]
+    refute_nil metadata
+    assert_equal 'test', metadata[:controller]
+  end
+end
+
+class ControllerLoggingInheritanceChainCallbackTest < InboundHTTPLoggerTestCase
+  def setup
+    super
+    # Clear any existing callbacks before each test
+    InboundHTTPLogger::Concerns::ControllerLogging.send(:class_variable_set, :@@context_callbacks, {})
+
+    @controller_base_class = Class.new do
+      # Mock Rails controller methods
+      def self.after_action(*args, **kwargs)
+        # No-op for testing
+      end
+
+      def self.skip_after_action(*args, **kwargs)
+        # No-op for testing
       end
     end
 
-    it 'executes method-based context callback' do
-      controller_class_with_callback.inbound_logging_context(:set_log_context)
-      controller = controller_class_with_callback.new
-
-      controller.send(:setup_inbound_logging)
-
-      metadata = Thread.current[:inbound_http_logger_metadata]
-      loggable = Thread.current[:inbound_http_logger_loggable]
-
-      _(metadata[:custom_field]).must_equal 'custom_value'
-      _(loggable.id).must_equal 999
-    end
-
-    it 'executes lambda-based context callback' do
-      test_lambda = lambda { |log|
-        log.metadata[:lambda_field] = 'lambda_value'
-        log.loggable = 'test_loggable'
-      }
-
-      controller_class_with_callback.inbound_logging_context(test_lambda)
-      controller = controller_class_with_callback.new
-
-      controller.send(:setup_inbound_logging)
-
-      metadata = Thread.current[:inbound_http_logger_metadata]
-      loggable = Thread.current[:inbound_http_logger_loggable]
-
-      _(metadata[:lambda_field]).must_equal 'lambda_value'
-      _(loggable).must_equal 'test_loggable'
-    end
-
-    it 'handles missing callback method gracefully' do
-      controller_class_with_callback.inbound_logging_context(:nonexistent_method)
-      controller = controller_class_with_callback.new
-
-      # Should not raise an exception
-      controller.send(:setup_inbound_logging)
-
-      metadata = Thread.current[:inbound_http_logger_metadata]
-      _(metadata).wont_be_nil
-      _(metadata[:controller]).must_equal 'test'
-    end
-
-    it 'works without any context callback' do
-      # Don't set any callback
-      controller = controller_class_with_callback.new
-
-      controller.send(:setup_inbound_logging)
-
-      metadata = Thread.current[:inbound_http_logger_metadata]
-      _(metadata).wont_be_nil
-      _(metadata[:controller]).must_equal 'test'
+    @base_controller_class = Class.new(@controller_base_class) do
+      include InboundHTTPLogger::Concerns::ControllerLogging
     end
   end
 
-  describe 'inheritance chain callback lookup' do
-    before do
-      # Clear any existing callbacks before each test
-      InboundHttpLogger::Concerns::ControllerLogging.send(:class_variable_set, :@@context_callbacks, {})
+  def test_finds_callback_in_current_class_when_set
+    # Set callback on the class itself
+    @base_controller_class.inbound_logging_context(:test_callback)
+
+    callback = @base_controller_class.inbound_logging_context_callback
+    assert_equal :test_callback, callback
+  end
+
+  def test_returns_nil_when_no_callback_is_set_anywhere_in_chain
+    # No callback set anywhere
+    callback = @base_controller_class.inbound_logging_context_callback
+    assert_nil callback
+  end
+
+  def test_finds_callback_in_parent_class_when_not_set_in_current_class
+    # Set callback on base class
+    @base_controller_class.inbound_logging_context(:parent_callback)
+
+    # Create subclass without its own callback
+    subclass = Class.new(@base_controller_class)
+
+    # Should find the parent's callback
+    callback = subclass.inbound_logging_context_callback
+    assert_equal :parent_callback, callback
+  end
+
+  def test_prefers_current_class_callback_over_parent_class_callback
+    # Set callback on base class
+    @base_controller_class.inbound_logging_context(:parent_callback)
+
+    # Create subclass with its own callback
+    subclass = Class.new(@base_controller_class) do
+      inbound_logging_context(:child_callback)
     end
 
-    let(:base_controller_class) do
-      Class.new(controller_base_class) do
-        include InboundHttpLogger::Concerns::ControllerLogging
-      end
+    # Should find the child's callback, not the parent's
+    callback = subclass.inbound_logging_context_callback
+    assert_equal :child_callback, callback
+  end
+
+  def test_walks_up_multiple_inheritance_levels
+    # Set callback on base class
+    @base_controller_class.inbound_logging_context(:grandparent_callback)
+
+    # Create middle class without callback
+    middle_class = Class.new(@base_controller_class)
+
+    # Create final subclass without callback
+    subclass = Class.new(middle_class)
+
+    # Should find the grandparent's callback
+    callback = subclass.inbound_logging_context_callback
+    assert_equal :grandparent_callback, callback
+  end
+
+  def test_stops_at_object_class_and_returns_nil_if_no_callback_found
+    # Create a deep inheritance chain with no callbacks
+    level1 = Class.new(@base_controller_class)
+    level2 = Class.new(level1)
+    level3 = Class.new(level2)
+
+    # Should return nil since no callback is set anywhere
+    callback = level3.inbound_logging_context_callback
+    assert_nil callback
+  end
+
+  def test_works_with_lambda_callbacks_in_inheritance_chain
+    test_lambda = ->(log) { log.metadata[:inherited] = true }
+
+    # Set lambda callback on base class
+    @base_controller_class.inbound_logging_context(test_lambda)
+
+    # Create subclass
+    subclass = Class.new(@base_controller_class)
+
+    # Should find the parent's lambda callback
+    callback = subclass.inbound_logging_context_callback
+    assert_equal test_lambda, callback
+  end
+
+  def test_finds_first_callback_when_multiple_levels_have_callbacks
+    # Set callback on base class
+    @base_controller_class.inbound_logging_context(:grandparent_callback)
+
+    # Create middle class with callback
+    middle_class = Class.new(@base_controller_class) do
+      inbound_logging_context(:parent_callback)
     end
 
-    it 'finds callback in current class when set' do
-      # Set callback on the class itself
-      base_controller_class.inbound_logging_context(:test_callback)
+    # Create final subclass without callback
+    subclass = Class.new(middle_class)
 
-      callback = base_controller_class.inbound_logging_context_callback
-      _(callback).must_equal :test_callback
-    end
-
-    it 'returns nil when no callback is set anywhere in chain' do
-      # No callback set anywhere
-      callback = base_controller_class.inbound_logging_context_callback
-      _(callback).must_be_nil
-    end
-
-    it 'finds callback in parent class when not set in current class' do
-      # Set callback on base class
-      base_controller_class.inbound_logging_context(:parent_callback)
-
-      # Create subclass without its own callback
-      subclass = Class.new(base_controller_class)
-
-      # Should find the parent's callback
-      callback = subclass.inbound_logging_context_callback
-      _(callback).must_equal :parent_callback
-    end
-
-    it 'prefers current class callback over parent class callback' do
-      # Set callback on base class
-      base_controller_class.inbound_logging_context(:parent_callback)
-
-      # Create subclass with its own callback
-      subclass = Class.new(base_controller_class) do
-        inbound_logging_context(:child_callback)
-      end
-
-      # Should find the child's callback, not the parent's
-      callback = subclass.inbound_logging_context_callback
-      _(callback).must_equal :child_callback
-    end
-
-    it 'walks up multiple inheritance levels' do
-      # Set callback on base class
-      base_controller_class.inbound_logging_context(:grandparent_callback)
-
-      # Create middle class without callback
-      middle_class = Class.new(base_controller_class)
-
-      # Create final subclass without callback
-      subclass = Class.new(middle_class)
-
-      # Should find the grandparent's callback
-      callback = subclass.inbound_logging_context_callback
-      _(callback).must_equal :grandparent_callback
-    end
-
-    it 'stops at Object class and returns nil if no callback found' do
-      # Create a deep inheritance chain with no callbacks
-      level1 = Class.new(base_controller_class)
-      level2 = Class.new(level1)
-      level3 = Class.new(level2)
-
-      # Should return nil since no callback is set anywhere
-      callback = level3.inbound_logging_context_callback
-      _(callback).must_be_nil
-    end
-
-    it 'works with lambda callbacks in inheritance chain' do
-      test_lambda = ->(log) { log.metadata[:inherited] = true }
-
-      # Set lambda callback on base class
-      base_controller_class.inbound_logging_context(test_lambda)
-
-      # Create subclass
-      subclass = Class.new(base_controller_class)
-
-      # Should find the parent's lambda callback
-      callback = subclass.inbound_logging_context_callback
-      _(callback).must_equal test_lambda
-    end
-
-    it 'finds first callback when multiple levels have callbacks' do
-      # Set callback on base class
-      base_controller_class.inbound_logging_context(:grandparent_callback)
-
-      # Create middle class with callback
-      middle_class = Class.new(base_controller_class) do
-        inbound_logging_context(:parent_callback)
-      end
-
-      # Create final subclass without callback
-      subclass = Class.new(middle_class)
-
-      # Should find the immediate parent's callback, not the grandparent's
-      callback = subclass.inbound_logging_context_callback
-      _(callback).must_equal :parent_callback
-    end
+    # Should find the immediate parent's callback, not the grandparent's
+    callback = subclass.inbound_logging_context_callback
+    assert_equal :parent_callback, callback
   end
 end

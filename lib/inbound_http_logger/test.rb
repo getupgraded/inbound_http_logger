@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module InboundHttpLogger
+module InboundHTTPLogger
   # Test utilities for request logging
   module Test
     class << self
@@ -8,6 +8,9 @@ module InboundHttpLogger
       def configure(database_url: nil, adapter: :sqlite)
         @test_adapter = create_adapter(database_url, adapter)
         @test_adapter&.establish_connection
+
+        # Enable main configuration for test logging to work
+        InboundHTTPLogger.enable!
       end
 
       # Enable test logging
@@ -158,13 +161,53 @@ module InboundHttpLogger
     module Helpers
       # Setup test logging
       def setup_inbound_http_logger_test(database_url: nil, adapter: :sqlite)
-        InboundHttpLogger::Test.configure(database_url: database_url, adapter: adapter)
-        InboundHttpLogger::Test.enable!
+        InboundHTTPLogger::Test.configure(database_url: database_url, adapter: adapter)
+        InboundHTTPLogger::Test.enable!
       end
 
       # Teardown test logging
       def teardown_inbound_http_logger_test
-        InboundHttpLogger::Test.disable!
+        InboundHTTPLogger::Test.disable!
+      end
+
+      # Backup current configuration state
+      def backup_inbound_http_logger_configuration
+        InboundHTTPLogger.global_configuration.backup
+      end
+
+      # Restore configuration from backup
+      def restore_inbound_http_logger_configuration(backup)
+        InboundHTTPLogger.global_configuration.restore(backup)
+      end
+
+      # Execute a block with modified configuration, then restore original
+      def with_inbound_http_logger_configuration(**options)
+        backup = backup_inbound_http_logger_configuration
+
+        InboundHTTPLogger.configure do |config|
+          options.each do |key, value|
+            case key
+            when :enabled
+              config.enabled = value
+            when :debug_logging
+              config.debug_logging = value
+            when :max_body_size
+              config.max_body_size = value
+            when :clear_excluded_paths
+              config.excluded_paths.clear if value
+            when :clear_excluded_content_types
+              config.excluded_content_types.clear if value
+            when :excluded_paths
+              Array(value).each { |path| config.excluded_paths << path }
+            when :excluded_content_types
+              Array(value).each { |type| config.excluded_content_types << type }
+            end
+          end
+        end
+
+        yield
+      ensure
+        restore_inbound_http_logger_configuration(backup)
       end
 
       # Assert request was logged
@@ -172,7 +215,7 @@ module InboundHttpLogger
         criteria = { method: method, path: path }
         criteria[:status] = status if status
 
-        logs = InboundHttpLogger::Test.logs_matching(criteria)
+        logs = InboundHTTPLogger::Test.logs_matching(criteria)
 
         if defined?(assert) # Minitest
           assert logs.any?, "Expected request to be logged: #{method.upcase} #{path}"
@@ -188,9 +231,9 @@ module InboundHttpLogger
       # Assert request count
       def assert_request_count(expected_count, criteria = {})
         actual_count = if criteria.empty?
-                         InboundHttpLogger::Test.logs_count
+                         InboundHTTPLogger::Test.logs_count
                        else
-                         InboundHttpLogger::Test.logs_matching(criteria).count
+                         InboundHTTPLogger::Test.logs_matching(criteria).count
                        end
 
         if defined?(assert_equal) # Minitest
@@ -204,7 +247,7 @@ module InboundHttpLogger
 
       # Assert success rate
       def assert_success_rate(expected_rate, tolerance: 0.1)
-        analysis = InboundHttpLogger::Test.analyze
+        analysis = InboundHTTPLogger::Test.analyze
         actual_rate = analysis[:success_rate]
 
         if defined?(assert_in_delta) # Minitest
@@ -214,6 +257,12 @@ module InboundHttpLogger
         else
           raise 'No test framework detected'
         end
+      end
+
+      # Thread-safe configuration override for simple attribute changes
+      # This is the recommended method for parallel testing
+      def with_thread_safe_configuration(**overrides, &block)
+        InboundHTTPLogger.with_configuration(**overrides, &block)
       end
     end
   end

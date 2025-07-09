@@ -1,3 +1,6 @@
+# Prevent inheriting from parent directory configs
+inherit_from: []
+
 plugins:
 - rubocop-rails
 - rubocop-thread_safety
@@ -23,8 +26,16 @@ AllCops:
     - 'pkg/**/*'
     - 'lib/inbound_http_logger/generators/templates/**/*'
     - 'README.md'
+    - 'AGENTS.md'
 
 # Gem-specific overrides
+Rails/ApplicationRecord:
+  Enabled: false
+
+Rails/RefuteMethods:
+  Enabled: true
+  EnforcedStyle: refute
+
 Style/Documentation:
   Enabled: false
   Exclude:
