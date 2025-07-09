@@ -195,9 +195,20 @@ class InboundRequestLogInstanceMethodsTest < InboundHTTPLoggerTestCase
       http_method: 'GET',
       url: '/test',
       status_code: 200,
-      duration_seconds: 0.123,
       duration_ms: 123.45
     )
+  end
+
+  def test_calculates_duration_seconds_from_milliseconds
+    assert_equal 0.12345, @log.duration_seconds
+
+    # Test with nil duration
+    @log.duration_ms = nil
+    assert_nil @log.duration_seconds
+
+    # Test with different values
+    @log.duration_ms = 1500.0
+    assert_equal 1.5, @log.duration_seconds
   end
 
   def test_formats_duration_correctly

@@ -124,7 +124,6 @@ module InboundHTTPLogger
             status_code: status,
             response_headers: filtered_response_headers,
             response_body: filtered_response_body,
-            duration_seconds: duration_seconds,
             duration_ms: duration_ms,
             loggable: loggable,
             metadata: metadata
@@ -175,7 +174,6 @@ module InboundHTTPLogger
             status_code: status,
             response_headers: filtered_response_headers,
             response_body: filtered_response_body,
-            duration_seconds: duration_seconds,
             duration_ms: duration_ms,
             loggable_type: loggable&.class&.name,
             loggable_id: loggable&.id,
@@ -341,6 +339,13 @@ module InboundHTTPLogger
       # Check if the request was slow
       def slow?(threshold_ms = 1000)
         duration_ms && duration_ms > threshold_ms
+      end
+
+      # Get the duration in seconds (calculated from duration_ms)
+      def duration_seconds
+        return nil unless duration_ms
+
+        (duration_ms / 1000.0).round(6)
       end
 
       # Get the duration in a human-readable format

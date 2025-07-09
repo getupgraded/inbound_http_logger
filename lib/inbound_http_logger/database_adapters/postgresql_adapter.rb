@@ -167,7 +167,6 @@ module InboundHTTPLogger
               status_code INTEGER NOT NULL,
               response_headers JSONB DEFAULT '{}',
               response_body JSONB,
-              duration_seconds DECIMAL(10,6),
               duration_ms DECIMAL(10,2),
               loggable_type VARCHAR(255),
               loggable_id BIGINT,

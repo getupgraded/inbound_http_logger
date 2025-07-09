@@ -30,7 +30,6 @@ class <%= migration_class_name %> < ActiveRecord::Migration[<%= ActiveRecord::Mi
       t.integer :status_code, null: false
 
       # Performance metrics
-      t.decimal :duration_seconds, precision: 10, scale: 6
       t.decimal :duration_ms, precision: 10, scale: 2
 
       # Polymorphic association
