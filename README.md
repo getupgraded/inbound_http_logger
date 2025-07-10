@@ -63,6 +63,30 @@ InboundHTTPLogger.configure do |config|
 end
 ```
 
+### Environment Variable Control
+
+You can completely disable the gem (preventing middleware registration, controller concerns, and all functionality) using environment variables:
+
+```bash
+# Disable the gem completely (no middleware, no controller concerns, no logging)
+ENABLE_INBOUND_HTTP_LOGGER=false
+
+# Enable the gem (default behavior)
+ENABLE_INBOUND_HTTP_LOGGER=true
+# or simply omit the variable (defaults to enabled)
+```
+
+**Supported disable values:** `false`, `FALSE`, `0`, `no`, `off`
+**All other values (including missing/empty) enable the gem**
+
+This is particularly useful for:
+- **Heroku deployments**: Change environment variables to disable logging without code changes
+- **Performance testing**: Quickly disable HTTP logging overhead
+- **Debugging**: Isolate issues by disabling HTTP request logging
+- **Independent control**: Disable inbound logging while keeping outbound logging active
+
+**Note:** Environment variable changes require an application restart to take effect.
+
 ### Environment-specific Configuration
 
 ```ruby

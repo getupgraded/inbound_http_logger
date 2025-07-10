@@ -3,8 +3,9 @@
 ## 0.0.4
 
 * remove unnecessary duration_seconds column from database
+* add quick enable/disable via environmen variable
 
-# 0.0.3
+## 0.0.3
 
 * Database adapter architecture for better maintainability and flexibility.
 * Added support for alternate database for SQLite logging.
@@ -13,12 +14,12 @@
 * Rename gem to use HTTP (not Http) in the name.
 * Better threading/parallel run support in tests.
 
-# 0.0.2
+## 0.0.2
 
 * Added support for callbacks in parent classes.
 * Use JSONB in PostgreSQL.
 
-# 0.0.1
+## 0.0.1
 
 * Initial release with:
 

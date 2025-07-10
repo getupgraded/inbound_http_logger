@@ -15,7 +15,6 @@ require_relative 'inbound_http_logger/configuration'
 require_relative 'inbound_http_logger/models/inbound_request_log'
 require_relative 'inbound_http_logger/middleware/logging_middleware'
 require_relative 'inbound_http_logger/concerns/controller_logging'
-require_relative 'inbound_http_logger/railtie' if defined?(Rails)
 
 module InboundHTTPLogger
   class Error < StandardError; end
@@ -23,6 +22,16 @@ module InboundHTTPLogger
   @config_mutex = Mutex.new
 
   class << self
+    # Check if the gem is enabled via environment variable
+    # @return [Boolean] true if the gem should be loaded and active
+    def gem_enabled?
+      env_value = ENV['ENABLE_INBOUND_HTTP_LOGGER']
+      return true if env_value.blank? # Default to enabled
+
+      # Treat 'false', 'FALSE', '0', 'no', 'off' as disabled
+      !%w[false FALSE 0 no off].include?(env_value.to_s.strip)
+    end
+
     # Configuration instance (with thread-local override support)
     def configuration
       # Check for thread-local configuration override
@@ -151,3 +160,6 @@ module InboundHTTPLogger
       end
   end
 end
+
+# Only load Railtie if Rails is defined AND the gem is enabled via environment variable
+require_relative 'inbound_http_logger/railtie' if defined?(Rails) && !%w[false FALSE 0 no off].include?(ENV['ENABLE_INBOUND_HTTP_LOGGER'].to_s.strip)
