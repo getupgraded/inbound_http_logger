@@ -364,28 +364,26 @@ module InboundHTTPLogger
         Rack::Utils::HTTP_STATUS_CODES[status_code] || status_code.to_s
       end
 
-      private # Instance methods
+      # Format headers for display
+      def formatted_headers(headers)
+        return '' unless headers.is_a?(Hash)
 
-        # Format headers for display
-        def formatted_headers(headers)
-          return '' unless headers.is_a?(Hash)
+        headers.map { |key, value| "#{key}: #{value}" }.join("\n")
+      end
 
-          headers.map { |key, value| "#{key}: #{value}" }.join("\n")
+      # Format body for display
+      def formatted_body(body)
+        return '' unless body
+
+        case body
+        when String
+          body
+        when Hash, Array
+          JSON.pretty_generate(body)
+        else
+          body.to_s
         end
-
-        # Format body for display
-        def formatted_body(body)
-          return '' unless body
-
-          case body
-          when String
-            body
-          when Hash, Array
-            JSON.pretty_generate(body)
-          else
-            body.to_s
-          end
-        end
+      end
     end
   end
 end
