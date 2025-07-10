@@ -50,7 +50,6 @@ ActiveRecord::Schema.define do
     t.json :response_body
 
     # Performance metrics
-    t.decimal :duration_seconds, precision: 10, scale: 6
     t.decimal :duration_ms, precision: 10, scale: 2
 
     # Polymorphic association

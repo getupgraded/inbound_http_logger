@@ -159,7 +159,6 @@ module InboundHTTPLogger
               status_code INTEGER NOT NULL,
               response_headers TEXT DEFAULT '{}',
               response_body TEXT,
-              duration_seconds REAL,
               duration_ms REAL,
               loggable_type TEXT,
               loggable_id INTEGER,
