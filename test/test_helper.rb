@@ -16,6 +16,7 @@ require 'rack/mock'
 require 'active_support/test_case'
 
 require 'inbound_http_logger'
+require 'inbound_http_logger/defaults'
 
 # Set up in-memory SQLite database for testing
 # Note: We use establish_connection here only for the main test suite
@@ -95,88 +96,23 @@ module TestHelpers
     config = InboundHTTPLogger.global_configuration
     config.enabled = false
     config.debug_logging = false
-    config.max_body_size = 10_000
+    config.max_body_size = InboundHTTPLogger::Defaults::MAX_BODY_SIZE
 
     # Reset excluded paths to defaults (these are Sets, so we need to clear and add)
     config.excluded_paths.clear
-    config.excluded_paths.merge([
-                                  %r{^/assets/},
-                                  %r{^/packs/},
-                                  %r{^/health$},
-                                  %r{^/ping$},
-                                  %r{^/favicon\.ico$},
-                                  %r{^/robots\.txt$},
-                                  %r{^/sitemap\.xml$},
-                                  /\.css$/,
-                                  /\.js$/,
-                                  /\.map$/,
-                                  /\.ico$/,
-                                  /\.png$/,
-                                  /\.jpg$/,
-                                  /\.jpeg$/,
-                                  /\.gif$/,
-                                  /\.svg$/,
-                                  /\.woff$/,
-                                  /\.woff2$/,
-                                  /\.ttf$/,
-                                  /\.eot$/
-                                ])
+    config.excluded_paths.merge(InboundHTTPLogger::Defaults::EXCLUDED_PATHS)
 
     # Reset excluded content types to defaults
     config.excluded_content_types.clear
-    config.excluded_content_types.merge([
-                                          'text/html',
-                                          'text/css',
-                                          'text/javascript',
-                                          'application/javascript',
-                                          'application/x-javascript',
-                                          'image/png',
-                                          'image/jpeg',
-                                          'image/gif',
-                                          'image/svg+xml',
-                                          'image/webp',
-                                          'image/x-icon',
-                                          'video/mp4',
-                                          'video/webm',
-                                          'audio/mpeg',
-                                          'audio/wav',
-                                          'font/woff',
-                                          'font/woff2',
-                                          'application/font-woff',
-                                          'application/font-woff2'
-                                        ])
+    config.excluded_content_types.merge(InboundHTTPLogger::Defaults::EXCLUDED_CONTENT_TYPES)
 
     # Reset sensitive headers to defaults
     config.sensitive_headers.clear
-    config.sensitive_headers.merge(%w[
-                                     authorization
-                                     cookie
-                                     set-cookie
-                                     x-api-key
-                                     x-auth-token
-                                     x-access-token
-                                     bearer
-                                     x-csrf-token
-                                     x-session-id
-                                   ])
+    config.sensitive_headers.merge(InboundHTTPLogger::Defaults::SENSITIVE_HEADERS)
 
     # Reset sensitive body keys to defaults
     config.sensitive_body_keys.clear
-    config.sensitive_body_keys.merge(%w[
-                                       password
-                                       secret
-                                       token
-                                       key
-                                       auth
-                                       credential
-                                       private
-                                       ssn
-                                       social_security_number
-                                       credit_card
-                                       card_number
-                                       cvv
-                                       pin
-                                     ])
+    config.sensitive_body_keys.merge(InboundHTTPLogger::Defaults::SENSITIVE_BODY_KEYS)
 
     # Reset excluded controllers to defaults
     config.excluded_controllers.clear

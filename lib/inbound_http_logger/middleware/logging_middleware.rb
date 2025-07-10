@@ -28,7 +28,7 @@ module InboundHTTPLogger
         return [status, headers, response] unless should_log_response?(request, status, headers, config)
 
         # Capture response body if needed
-        response_body = (read_response_body(response) if should_capture_response_body?(request, status, headers, config))
+        response_body = (read_response_body(response) if should_capture_response_body?(status, headers, config))
 
         # Calculate duration
         end_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -88,7 +88,7 @@ module InboundHTTPLogger
         end
 
         # Check if we should capture response body
-        def should_capture_response_body?(_request, status, headers, config = InboundHTTPLogger.configuration)
+        def should_capture_response_body?(status, headers, config = InboundHTTPLogger.configuration)
           return false if status == 204 # No Content
           return false if status >= 300 && status < 400 # Redirects typically don't have meaningful bodies
 
