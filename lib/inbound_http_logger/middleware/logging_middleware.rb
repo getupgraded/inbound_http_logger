@@ -28,7 +28,7 @@ module InboundHTTPLogger
         return [status, headers, response] unless should_log_response?(request, status, headers, config)
 
         # Capture response body if needed
-        response_body = (read_response_body(response) if should_capture_response_body?(request, status, headers, config))
+        response_body = (read_response_body(response) if should_capture_response_body?(status, headers, config))
 
         # Calculate duration
         end_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -45,19 +45,6 @@ module InboundHTTPLogger
 
         # Return the response
         [status, headers, response]
-      rescue StandardError => e
-        # Log the error but don't let it affect the application
-        # Use a fresh config reference in case the error was related to config access
-        begin
-          logger = InboundHTTPLogger.configuration.logger
-          logger.error("Error in InboundHTTPLogger::LoggingMiddleware: #{e.class}: #{e.message}")
-          logger.error(e.backtrace.join("\n")) if InboundHTTPLogger.configuration.debug_logging
-        rescue StandardError
-          # If even logging fails, silently continue to avoid breaking the application
-        end
-
-        # Re-raise to allow other error handlers to process it
-        raise e
       ensure
         # Clear thread-local data after request
         InboundHTTPLogger.clear_thread_data
@@ -88,7 +75,7 @@ module InboundHTTPLogger
         end
 
         # Check if we should capture response body
-        def should_capture_response_body?(_request, status, headers, config = InboundHTTPLogger.configuration)
+        def should_capture_response_body?(status, headers, config = InboundHTTPLogger.configuration)
           return false if status == 204 # No Content
           return false if status >= 300 && status < 400 # Redirects typically don't have meaningful bodies
 

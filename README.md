@@ -19,8 +19,7 @@ A production-safe gem for comprehensive inbound HTTP request logging in Rails ap
 
 ## Requirements
 
-This gem supports Ruby 3.2 or newer and Rails 7.2 or newer. The CI matrix also
-tests against Ruby 3.3 and Rails 8.1 to ensure compatibility.
+This gem supports Ruby 3.2 or newer and Rails 7.2 or newer. Rails 8.0+ is not yet supported due to compatibility issues. The CI matrix tests against Ruby 3.3 and Rails 7.2+ to ensure compatibility.
 
 ## Installation
 
@@ -907,10 +906,6 @@ InboundHTTPLogger.with_configuration(**overrides) { ... }  # Thread-safe tempora
 InboundHTTPLogger.global_configuration                     # Access global config directly
 InboundHTTPLogger.reset_configuration!                     # Reset to defaults (testing only)
 
-# Additional Database Logging (optional, in addition to main database)
-InboundHTTPLogger.enable_secondary_logging!(url, adapter: :sqlite)
-InboundHTTPLogger.disable_secondary_logging!
-InboundHTTPLogger.secondary_logging_enabled?
 ```
 
 ### Test Module Methods

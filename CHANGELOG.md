@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.5
+
+* **BREAKING**: Improved error handling in middleware to prevent application errors from being attributed to the gem
+* Fixed issue where application errors (like template errors) appeared to originate from InboundHTTPLogger middleware
+* Removed broad `rescue StandardError` block that was catching and logging application errors with gem's name prefix
+* Preserved failsafe error handling for the gem's own logging operations
+* Enhanced test coverage for error handling scenarios
+* Application errors now pass through normally to the application's error handling system
+
 ## 0.0.4
 
 * remove unnecessary duration_seconds column from database
