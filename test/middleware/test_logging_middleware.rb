@@ -164,9 +164,81 @@ class LoggingMiddlewareEnabledTest < InboundHTTPLoggerTestCase
     end
 
     # When an error occurs before response, no request is logged
-    # This is expected behavior since the middleware catches the error
-    # but doesn't have response information to log
+    # This is expected behavior since the error occurs before logging
     assert_no_request_logged
+  end
+
+  def test_application_errors_pass_through_without_middleware_logging
+    # Create an app that raises an error
+    error_app = ->(_env) { raise ArgumentError, 'Application error' }
+    error_middleware = InboundHTTPLogger::Middleware::LoggingMiddleware.new(error_app)
+
+    env = Rack::MockRequest.env_for('/error', method: 'GET')
+
+    # The error should be re-raised as-is, not caught and logged by middleware
+    error = assert_raises(ArgumentError) do
+      error_middleware.call(env)
+    end
+
+    assert_equal 'Application error', error.message
+    assert_no_request_logged
+  end
+
+  def test_thread_cleanup_happens_even_with_application_errors
+    # Set some thread-local data
+    InboundHTTPLogger.set_metadata({ user_id: 123 })
+    InboundHTTPLogger.set_loggable(Object.new)
+
+    # Verify data is set
+    assert_equal({ user_id: 123 }, Thread.current[:inbound_http_logger_metadata])
+    refute_nil Thread.current[:inbound_http_logger_loggable]
+
+    # Create an app that raises an error
+    error_app = ->(_env) { raise StandardError, 'Something went wrong' }
+    error_middleware = InboundHTTPLogger::Middleware::LoggingMiddleware.new(error_app)
+
+    env = Rack::MockRequest.env_for('/error', method: 'GET')
+
+    assert_raises(StandardError) do
+      error_middleware.call(env)
+    end
+
+    # Thread-local data should be cleared even when errors occur
+    assert_nil Thread.current[:inbound_http_logger_metadata]
+    assert_nil Thread.current[:inbound_http_logger_loggable]
+  end
+
+  def test_logging_errors_are_handled_gracefully
+    # Mock the log_request method to raise an error
+    original_method = InboundHTTPLogger::Models::InboundRequestLog.method(:log_request)
+    InboundHTTPLogger::Models::InboundRequestLog.define_singleton_method(:log_request) do |*_args|
+      raise StandardError, 'Database connection failed'
+    end
+
+    # Capture log output to verify error is logged
+    log_output = StringIO.new
+    logger = Logger.new(log_output)
+
+    with_thread_safe_configuration(logger_factory: -> { logger }) do
+      env = Rack::MockRequest.env_for('/users', method: 'GET')
+
+      # The request should still succeed despite logging error
+      status, headers, = @middleware.call(env)
+
+      assert_equal 200, status
+      assert_equal 'application/json', headers['Content-Type']
+
+      # No request should be logged due to the error
+      assert_no_request_logged
+
+      # Error should be logged
+      log_content = log_output.string
+      assert_includes log_content, 'Error logging inbound request'
+      assert_includes log_content, 'Database connection failed'
+    end
+  ensure
+    # Restore original method
+    InboundHTTPLogger::Models::InboundRequestLog.define_singleton_method(:log_request, original_method)
   end
 
   def test_clears_thread_local_data_after_request

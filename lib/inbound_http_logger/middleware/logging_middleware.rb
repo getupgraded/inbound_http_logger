@@ -45,19 +45,6 @@ module InboundHTTPLogger
 
         # Return the response
         [status, headers, response]
-      rescue StandardError => e
-        # Log the error but don't let it affect the application
-        # Use a fresh config reference in case the error was related to config access
-        begin
-          logger = InboundHTTPLogger.configuration.logger
-          logger.error("Error in InboundHTTPLogger::LoggingMiddleware: #{e.class}: #{e.message}")
-          logger.error(e.backtrace.join("\n")) if InboundHTTPLogger.configuration.debug_logging
-        rescue StandardError
-          # If even logging fails, silently continue to avoid breaking the application
-        end
-
-        # Re-raise to allow other error handlers to process it
-        raise e
       ensure
         # Clear thread-local data after request
         InboundHTTPLogger.clear_thread_data
